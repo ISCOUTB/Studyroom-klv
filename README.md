@@ -26,8 +26,8 @@ El equipo trabaja bajo una metodología Scrum adaptada a un equipo de tres perso
 - **Metodología:** ver `docs/metodologia/`
 
 ## Estructura del repositorio
-## Estructura del repositorio
 
+​```
 Studyroom-klv/
 ├── docs/
 │   ├── requerimientos/     # Requerimientos funcionales y no funcionales,
@@ -39,3 +39,4 @@ Studyroom-klv/
 ├── backend/                 # Código del servidor (próximamente)
 ├── frontend/                # Código de la interfaz (próximamente)
 └── .gitignore
+​```
