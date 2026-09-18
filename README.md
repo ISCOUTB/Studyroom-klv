@@ -22,7 +22,7 @@ Los estudiantes de primeros semestres enfrentan dificultades para encontrar comp
 
 El equipo trabaja bajo una metodología Scrum adaptada a un equipo de tres personas, con sprints alineados a los cortes de evaluación del curso.
 
-- **Tablero de gestión:** [enlace al tablero] <!-- reemplazar cuando esté creado -->
+- **Tablero de gestión:** [(https://trello.com/b/m0JZb8iJ/estudio-simult%C3%A1neo-y-tutor%C3%ADas-academicas)] <!-- reemplazar cuando esté creado -->
 - **Metodología:** ver `docs/metodologia/`
 
 ## Estructura del repositorio
