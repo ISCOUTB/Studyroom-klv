@@ -40,3 +40,12 @@ Studyroom-klv/
 ├── frontend/                # Código de la interfaz (próximamente)
 └── .gitignore
 ​```
+
+## Documentación
+
+- [Descripción del problema e interesados](docs/requerimientos/Problema_e_interesados.docx)
+- [Requerimientos funcionales y no funcionales](docs/requerimientos/Requerimientos_funcionales_nofuncionales.pdf)
+
+## Estado del proyecto
+
+En desarrollo — fase de análisis de requerimientos (segundo corte).
