@@ -48,4 +48,4 @@ Studyroom-klv/
 
 ## Estado del proyecto
 
-En desarrollo — fase de análisis de requerimientos (segundo corte).
+En desarrollo — fase de desarrollo (segundo corte). 
