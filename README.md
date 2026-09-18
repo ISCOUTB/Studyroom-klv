@@ -43,10 +43,9 @@ Studyroom-klv/
 
 ## Documentación
 
-- [Descripción del problema e interesados]([[docs/requerimientos/Problema_e_interesados.docx](https://github.com/ISCOUTB/Studyroom-klv/blob/master/docs/requerimientos/Problema_e_interesados.docx.docx)](https://github.com/ISCOUTB/Studyroom-klv/blob/master/docs/requerimientos/Problema_e_interesados.docx.docx))
+- [Descripción del problema e interesados]
 
-
-- [Requerimientos funcionales y no funcionales](docs/requerimientos/Requerimientos_funcionales_nofuncionales.pdf)
+- [Requerimientos funcionales y no funcionales]
 
 ## Estado del proyecto
 
