@@ -1,0 +1,183 @@
+// ============================================================
+// Prisma Schema — Campus Collaborative Study (UTB)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RolEnum {
+  ESTUDIANTE
+  TUTOR
+  ADMINISTRADOR
+}
+
+enum EstadoSalaEnum {
+  ACTIVA
+  PROGRAMADA
+  FINALIZADA
+}
+
+enum PrivacidadSalaEnum {
+  PUBLICA
+  PRIVADA
+}
+
+enum EstadoTutoriaEnum {
+  SOLICITADA
+  AGENDADA
+  RECHAZADA
+  EXPIRADA
+  CANCELADA
+  FINALIZADA
+}
+
+enum ModalidadEnum {
+  VIRTUAL
+  PRESENCIAL
+}
+
+enum EstadoParticipacionEnum {
+  ACTIVO
+  ABANDONO
+}
+
+model Usuario {
+  id                String         @id @default(uuid())
+  nombre            String
+  correoUnico       String         @unique @map("correo_unico")
+  contrasenaHash    String         @map("contrasena_hash")
+  salt              String
+  rol               RolEnum        @default(ESTUDIANTE)
+  emailVerificado   Boolean        @default(false) @map("email_verificado")
+  tokenVerificacion String?        @map("token_verificacion")
+  resetToken        String?        @map("reset_token")
+  resetTokenExp     DateTime?      @map("reset_token_exp")
+  creadoEn          DateTime       @default(now()) @map("creado_en")
+  actualizadoEn     DateTime       @updatedAt @map("actualizado_en")
+
+  estudiante        Estudiante?
+  tutor             Tutor?
+  administrador     Administrador?
+  salasAnfitrion    SalaEstudio[]  @relation("AnfitrionSalas")
+  participaciones   ParticipacionSala[]
+  mensajes          MensajeChat[]
+  tutoriasSolicitadas Tutoria[]    @relation("SolicitanteTutorias")
+
+  @@map("usuarios")
+}
+
+model Estudiante {
+  id        String   @id
+  usuario   Usuario  @relation(fields: [id], references: [id], onDelete: Cascade)
+  carrera   String
+  semestre  Int
+  fotoUrl   String?  @map("foto_url")
+
+  @@map("estudiantes")
+}
+
+model Tutor {
+  id            String       @id
+  usuario       Usuario      @relation(fields: [id], references: [id], onDelete: Cascade)
+  carrera       String
+  semestre      Int
+  fotoUrl       String?      @map("foto_url")
+  biografia     String?      @db.VarChar(300)
+  modalidad     ModalidadEnum @default(VIRTUAL)
+  ubicacion     String?      // ej: "Bloque C · Salón 204"
+  asignaturas   String[]     // ["Cálculo I", "Física I", etc.]
+  aprobado      Boolean      @default(false)
+  solicitudEn   DateTime     @default(now()) @map("solicitud_en")
+
+  disponibilidades DisponibilidadMonitor[]
+  tutoriasAsignadas Tutoria[]              @relation("MonitorTutorias")
+
+  @@map("tutores")
+}
+
+model Administrador {
+  id      String   @id
+  usuario Usuario  @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@map("administradores")
+}
+
+model SalaEstudio {
+  id            String             @id @default(uuid())
+  anfitrionId   String             @map("anfitrion_id")
+  anfitrion     Usuario            @relation("AnfitrionSalas", fields: [anfitrionId], references: [id])
+  titulo        String
+  asignatura    String             // Cálculo | Física | Álgebra | Estadística
+  tema          String
+  descripcion   String
+  cupoMaximo    Int                @default(10) @map("cupo_maximo")
+  privacidad    PrivacidadSalaEnum @default(PUBLICA)
+  estado        EstadoSalaEnum     @default(ACTIVA)
+  creadoEn      DateTime           @default(now()) @map("creado_en")
+
+  participantes ParticipacionSala[]
+  mensajes      MensajeChat[]
+
+  @@map("salas_estudio")
+}
+
+model ParticipacionSala {
+  id          String                  @id @default(uuid())
+  salaId      String                  @map("sala_id")
+  sala        SalaEstudio             @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  usuarioId   String                  @map("usuario_id")
+  usuario     Usuario                 @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  unioEn      DateTime                @default(now()) @map("unio_en")
+  estado      EstadoParticipacionEnum @default(ACTIVO)
+
+  @@unique([salaId, usuarioId])
+  @@map("participacion_sala")
+}
+
+model Tutoria {
+  id              String            @id @default(uuid())
+  solicitanteId   String            @map("solicitante_id")
+  solicitante     Usuario           @relation("SolicitanteTutorias", fields: [solicitanteId], references: [id])
+  monitorId       String            @map("monitor_id")
+  monitor         Tutor             @relation("MonitorTutorias", fields: [monitorId], references: [id])
+  estado          EstadoTutoriaEnum @default(SOLICITADA)
+  solicitadaEn    DateTime          @default(now()) @map("solicitada_en")
+  expiraEn        DateTime          @map("expira_en") // solicitadaEn + 24 horas
+  respondidaEn    DateTime?         @map("respondida_en")
+  programadaEn    DateTime?         @map("programada_en")
+  modalidad       ModalidadEnum     @default(VIRTUAL)
+  ubicacion       String?
+  notas           String?
+
+  @@map("tutorias")
+}
+
+model DisponibilidadMonitor {
+  id        String   @id @default(uuid())
+  tutorId   String   @map("tutor_id")
+  tutor     Tutor    @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  fecha     DateTime @db.Date
+  horaIni   String   @map("hora_ini") // formato "09:00"
+  horaFin   String   @map("hora_fin") // formato "10:00"
+  diaSemana String   @map("dia_semana") // Lun | Mar | Mié | Jue | Vie
+
+  @@map("disponibilidad_monitor")
+}
+
+model MensajeChat {
+  id        String      @id @default(uuid())
+  salaId    String      @map("sala_id")
+  sala      SalaEstudio @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  usuarioId String      @map("usuario_id")
+  usuario   Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  contenido String
+  enviadoEn DateTime    @default(now()) @map("enviado_en")
+
+  @@map("mensajes_chat")
+}
