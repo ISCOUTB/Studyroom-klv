@@ -19,7 +19,7 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ## Estructura del Stack
 
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
-- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth` y las salas de estudio en `/api/salas`; Tutorías y Recursos se montarán sobre la misma API.
+- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas` y los materiales de cada sala en `/api/salas/:id/materiales`; Tutorías se montarán sobre la misma API.
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
 - **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con token de 24 h y recuperación de contraseña con token de 1 h.
 - **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del backend para desarrollo.
@@ -135,13 +135,17 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | `POST` | `/api/salas/:id/unirse` | Une al usuario autenticado a la sala (valida el cupo). |
 | `POST` | `/api/salas/:id/abandonar` | Marca la participación del usuario como abandonada y lo saca del chat en tiempo real. |
 | `GET` | `/api/salas/:id/mensajes` | Devuelve los últimos 100 mensajes del chat en orden cronológico. Solo para participantes activos. |
+| `GET` | `/api/salas/:id/materiales` | Lista los materiales de la sala, del más reciente al más antiguo. Solo para participantes activos. |
+| `POST` | `/api/salas/:id/materiales` | Sube un archivo (`multipart/form-data`, campo `archivo`) con descripción opcional (máx. 300 caracteres). Solo para participantes activos. |
+| `GET` | `/api/salas/:id/materiales/:materialId/descargar` | Descarga el archivo original. Requiere JWT y participación activa. |
+| `DELETE` | `/api/salas/:id/materiales/:materialId` | Elimina un material. Puede hacerlo quien lo subió, el anfitrión de la sala o un administrador. |
 
 ### Pantallas de salas (frontend)
 
 | Ruta | Descripción |
 | --- | --- |
 | `/salas` | Listado real desde la API, búsqueda, filtros por asignatura/estado, creación de salas y acceso a cada sala. |
-| `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye chat en tiempo real con historial y presencia. Los materiales siguen pendientes. |
+| `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye chat en tiempo real con historial y presencia, y la pestaña de materiales con carga, descarga y eliminación de archivos. |
 
 ---
 
@@ -167,6 +171,22 @@ El chat usa **Socket.IO** en `http://localhost:3001/socket.io`, sobre el mismo s
 | Servidor → Cliente | `sala:expulsado` | `{ salaId, motivo }` | El usuario dejó de ser participante activo de la sala. |
 
 Los eventos que modifican estado responden con un `ack` en formato `{ ok, error }`. La interfaz usa la petición HTTP del historial y mantiene el orden cronológico de los mensajes.
+
+---
+
+## Materiales de Estudio
+
+Cada sala tiene una pestaña **Materiales** donde los participantes activos pueden compartir archivos y descargar los que subió el grupo.
+
+- **Almacenamiento:** los archivos se guardan en disco en `backend/uploads` (ruta ignorada por Git). Los metadatos viven en la tabla `materiales_estudio` de PostgreSQL. La carpeta se crea automáticamente al iniciar el backend.
+- **Tamaño máximo:** 10 MB por archivo.
+- **Formatos permitidos:** PDF, Word (`.doc`, `.docx`), PowerPoint (`.ppt`, `.pptx`), Excel (`.xls`, `.xlsx`), TXT e imágenes JPG, PNG y WEBP.
+- **Privacidad:** ni la lista ni la descarga son públicas. El backend exige el JWT y verifica que el usuario tenga una participación `ACTIVO` en la sala.
+- **Permisos de eliminación:** quien subió el material, el anfitrión de la sala o un usuario con rol `ADMINISTRADOR`.
+- **Límite de descripción:** 300 caracteres (opcional).
+- **Descarga:** el navegador solicita el archivo con el header `Authorization` y lo guarda con su nombre original.
+
+La ruta de almacenamiento se puede cambiar con la variable opcional `UPLOADS_DIR` en `backend/.env`. Si se usa una ruta relativa, se resuelve desde la carpeta `backend`. En producción conviene respaldar esa carpeta o migrarla a un almacenamiento de objetos.
 
 ---
 

@@ -60,6 +60,48 @@ export interface PresenciaSala {
   usuarios: string[];
 }
 
+export interface MaterialEstudio {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  tipoMime: string;
+  tamano: number;
+  creadoEn: string;
+  usuario: {
+    id: string;
+    nombre: string;
+  };
+  puedeEliminar: boolean;
+}
+
+export const MAX_MATERIAL_BYTES = 10 * 1024 * 1024;
+
+export const EXTENSIONES_MATERIALES = [
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.ppt',
+  '.pptx',
+  '.xls',
+  '.xlsx',
+  '.txt',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+] as const;
+
+export function extensionDe(nombre: string): string {
+  const punto = nombre.lastIndexOf('.');
+  return punto >= 0 ? nombre.slice(punto).toLowerCase() : '';
+}
+
+export function formatearTamano(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
+}
+
 // La base de datos no guarda una imagen por sala: se elige una acorde
 // a la asignatura para conservar el diseño actual de las tarjetas.
 const IMAGENES_POR_ASIGNATURA: Record<string, string> = {

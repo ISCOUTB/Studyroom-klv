@@ -68,6 +68,7 @@ model Usuario {
   salasAnfitrion    SalaEstudio[]  @relation("AnfitrionSalas")
   participaciones   ParticipacionSala[]
   mensajes          MensajeChat[]
+  materiales        MaterialEstudio[]
   tutoriasSolicitadas Tutoria[]    @relation("SolicitanteTutorias")
 
   @@map("usuarios")
@@ -124,6 +125,7 @@ model SalaEstudio {
 
   participantes ParticipacionSala[]
   mensajes      MensajeChat[]
+  materiales    MaterialEstudio[]
 
   @@map("salas_estudio")
 }
@@ -181,4 +183,21 @@ model MensajeChat {
   enviadoEn DateTime    @default(now()) @map("enviado_en")
 
   @@map("mensajes_chat")
+}
+
+model MaterialEstudio {
+  id             String      @id @default(uuid())
+  salaId         String      @map("sala_id")
+  sala           SalaEstudio @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  usuarioId      String      @map("usuario_id")
+  usuario        Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  nombreOriginal String      @map("nombre_original")
+  nombreArchivo  String      @map("nombre_archivo")
+  tipoMime       String      @map("tipo_mime")
+  tamano         Int
+  descripcion    String?     @db.VarChar(300)
+  creadoEn       DateTime    @default(now()) @map("creado_en")
+
+  @@index([salaId, creadoEn])
+  @@map("materiales_estudio")
 }

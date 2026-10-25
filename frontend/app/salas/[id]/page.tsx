@@ -7,13 +7,19 @@ import { useParams, useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
 import { apiRequest, API_URL } from '@/lib/api';
 import {
+  type MaterialEstudio,
   type MensajeChat,
   type PresenciaSala,
   type SalaDetalle,
+  EXTENSIONES_MATERIALES,
+  MAX_MATERIAL_BYTES,
+  extensionDe,
+  formatearTamano,
   inicialesDe,
 } from '@/lib/salas';
 
 const MAX_MENSAJE = 500;
+const MAX_DESCRIPCION_MATERIAL = 300;
 
 function horaDe(iso: string): string {
   const fecha = new Date(iso);
@@ -21,6 +27,42 @@ function horaDe(iso: string): string {
 
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(fecha.getHours())}:${pad(fecha.getMinutes())}`;
+}
+
+function fechaCortaDe(iso: string): string {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return '';
+
+  return fecha.toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function iconoDeMaterial(nombre: string): { emoji: string; clase: string } {
+  const extension = extensionDe(nombre);
+
+  if (extension === '.pdf') {
+    return { emoji: '📕', clase: 'bg-red-500/15 text-red-300' };
+  }
+  if (extension === '.doc' || extension === '.docx') {
+    return { emoji: '📘', clase: 'bg-blue-500/15 text-blue-300' };
+  }
+  if (extension === '.ppt' || extension === '.pptx') {
+    return { emoji: '📊', clase: 'bg-orange-500/15 text-orange-300' };
+  }
+  if (extension === '.xls' || extension === '.xlsx') {
+    return { emoji: '📈', clase: 'bg-emerald-500/15 text-emerald-300' };
+  }
+  if (['.png', '.jpg', '.jpeg', '.webp'].includes(extension)) {
+    return { emoji: '🖼️', clase: 'bg-purple-500/15 text-purple-300' };
+  }
+  if (extension === '.txt') {
+    return { emoji: '📝', clase: 'bg-slate-500/20 text-slate-300' };
+  }
+
+  return { emoji: '📎', clase: 'bg-slate-500/20 text-slate-300' };
 }
 
 export default function SalaEnVivoPage() {
@@ -48,8 +90,26 @@ export default function SalaEnVivoPage() {
   const [conectadoChat, setConectadoChat] = useState(false);
   const [usuariosEnLinea, setUsuariosEnLinea] = useState<string[]>([]);
 
+  // Materiales de estudio
+  const [materiales, setMateriales] = useState<MaterialEstudio[]>([]);
+  const [cargandoMateriales, setCargandoMateriales] = useState(false);
+  const [errorMateriales, setErrorMateriales] = useState('');
+  const [archivoSeleccionado, setArchivoSeleccionado] = useState<File | null>(null);
+  const [descripcionMaterial, setDescripcionMaterial] = useState('');
+  const [subiendoMaterial, setSubiendoMaterial] = useState(false);
+  const [descargandoMaterialId, setDescargandoMaterialId] = useState<string | null>(
+    null
+  );
+  const [eliminandoMaterialId, setEliminandoMaterialId] = useState<string | null>(
+    null
+  );
+  const [confirmarEliminarId, setConfirmarEliminarId] = useState<string | null>(
+    null
+  );
+
   const socketRef = useRef<Socket | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const materialInputRef = useRef<HTMLInputElement | null>(null);
 
   const cargarSala = useCallback(async () => {
     if (!token || !salaId) return;
@@ -114,12 +174,46 @@ export default function SalaEnVivoPage() {
     }
   }, [token, salaId]);
 
+  const cargarMateriales = useCallback(async () => {
+    if (!token || !salaId) return;
+
+    setCargandoMateriales(true);
+
+    try {
+      const data = await apiRequest<{ materiales: MaterialEstudio[] }>(
+        `/api/salas/${encodeURIComponent(salaId)}/materiales`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setMateriales(data.materiales ?? []);
+      setErrorMateriales('');
+    } catch (err) {
+      setErrorMateriales(
+        err instanceof Error
+          ? err.message
+          : 'No se pudieron cargar los materiales de la sala.'
+      );
+    } finally {
+      setCargandoMateriales(false);
+    }
+  }, [token, salaId]);
+
   useEffect(() => {
     setMensajes([]);
     setMensajeTexto('');
     setErrorChat('');
     setUsuariosEnLinea([]);
+    setMateriales([]);
+    setErrorMateriales('');
+    setArchivoSeleccionado(null);
+    setDescripcionMaterial('');
+    setConfirmarEliminarId(null);
   }, [salaId]);
+
+  useEffect(() => {
+    if (activeTab !== 'materiales' || !sala?.participando) return;
+    void cargarMateriales();
+  }, [activeTab, sala?.participando, cargarMateriales]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -353,6 +447,161 @@ export default function SalaEnVivoPage() {
         setMensajeTexto('');
       }
     );
+  };
+
+  const limpiarArchivo = () => {
+    setArchivoSeleccionado(null);
+    setDescripcionMaterial('');
+    if (materialInputRef.current) {
+      materialInputRef.current.value = '';
+    }
+  };
+
+  const handleSeleccionarArchivo = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const archivo = e.target.files?.[0] ?? null;
+    setErrorMateriales('');
+
+    if (!archivo) {
+      setArchivoSeleccionado(null);
+      return;
+    }
+
+    const extension = extensionDe(archivo.name);
+    if (!(EXTENSIONES_MATERIALES as readonly string[]).includes(extension)) {
+      setArchivoSeleccionado(null);
+      e.target.value = '';
+      setErrorMateriales(
+        'Formato no permitido. Puedes subir PDF, Word, PowerPoint, Excel, TXT o imágenes JPG/PNG/WEBP.'
+      );
+      return;
+    }
+
+    if (archivo.size > MAX_MATERIAL_BYTES) {
+      setArchivoSeleccionado(null);
+      e.target.value = '';
+      setErrorMateriales('El archivo supera el límite de 10 MB.');
+      return;
+    }
+
+    setArchivoSeleccionado(archivo);
+  };
+
+  const handleSubirMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (
+      !archivoSeleccionado ||
+      !token ||
+      !salaId ||
+      subiendoMaterial ||
+      !sala?.participando
+    ) {
+      return;
+    }
+
+    setSubiendoMaterial(true);
+    setErrorMateriales('');
+
+    try {
+      const formulario = new FormData();
+      formulario.append('archivo', archivoSeleccionado);
+
+      const descripcion = descripcionMaterial.trim();
+      if (descripcion) {
+        formulario.append('descripcion', descripcion);
+      }
+
+      const data = await apiRequest<{ material: MaterialEstudio }>(
+        `/api/salas/${encodeURIComponent(salaId)}/materiales`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formulario,
+        }
+      );
+
+      setMateriales((prev) => [
+        data.material,
+        ...prev.filter((material) => material.id !== data.material.id),
+      ]);
+      limpiarArchivo();
+    } catch (err) {
+      setErrorMateriales(
+        err instanceof Error ? err.message : 'No se pudo subir el material.'
+      );
+    } finally {
+      setSubiendoMaterial(false);
+    }
+  };
+
+  const handleDescargarMaterial = async (material: MaterialEstudio) => {
+    if (!token || !salaId || descargandoMaterialId) return;
+
+    setDescargandoMaterialId(material.id);
+    setErrorMateriales('');
+
+    try {
+      const respuesta = await fetch(
+        `${API_URL}/api/salas/${encodeURIComponent(salaId)}/materiales/${encodeURIComponent(material.id)}/descargar`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!respuesta.ok) {
+        let data: { error?: string } | null = null;
+        try {
+          data = await respuesta.json();
+        } catch {
+          // Respuesta sin cuerpo JSON.
+        }
+        throw new Error(data?.error || 'No se pudo descargar el material.');
+      }
+
+      const blob = await respuesta.blob();
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = material.nombre;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setErrorMateriales(
+        err instanceof Error ? err.message : 'No se pudo descargar el material.'
+      );
+    } finally {
+      setDescargandoMaterialId(null);
+    }
+  };
+
+  const handleEliminarMaterial = async (material: MaterialEstudio) => {
+    if (!token || !salaId || eliminandoMaterialId) return;
+
+    setEliminandoMaterialId(material.id);
+    setErrorMateriales('');
+
+    try {
+      await apiRequest(
+        `/api/salas/${encodeURIComponent(salaId)}/materiales/${encodeURIComponent(material.id)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setMateriales((prev) =>
+        prev.filter((item) => item.id !== material.id)
+      );
+      setConfirmarEliminarId(null);
+    } catch (err) {
+      setErrorMateriales(
+        err instanceof Error ? err.message : 'No se pudo eliminar el material.'
+      );
+    } finally {
+      setEliminandoMaterialId(null);
+    }
   };
 
   if (isLoading || !user) return null;
@@ -765,15 +1014,280 @@ export default function SalaEnVivoPage() {
           )}
 
           {activeTab === 'materiales' && (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-              <div className="text-3xl mb-3">📄</div>
-              <p className="text-xs font-semibold text-slate-300">
-                Aún no hay materiales
-              </p>
-              <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
-                La carga y descarga de archivos se habilitará en una fase
-                posterior.
-              </p>
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="px-3 py-2 border-b border-slate-700/60 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                <span>
+                  {sala.participando
+                    ? `${materiales.length} material${materiales.length === 1 ? '' : 'es'}`
+                    : 'Solo participantes'}
+                </span>
+                {sala.participando && (
+                  <button
+                    type="button"
+                    onClick={() => materialInputRef.current?.click()}
+                    disabled={subiendoMaterial}
+                    className="rounded-lg bg-[#0B4FC4] px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    + Subir material
+                  </button>
+                )}
+              </div>
+
+              {!sala.participando ? (
+                <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+                  <div className="text-3xl mb-3">🔒</div>
+                  <p className="text-xs font-semibold text-slate-300">
+                    Materiales para participantes
+                  </p>
+                  <p className="mt-1 max-w-[240px] text-[11px] leading-relaxed text-slate-500">
+                    Únete a la sala para consultar, descargar y compartir los
+                    archivos de estudio del grupo.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <form
+                    onSubmit={handleSubirMaterial}
+                    className="space-y-2 border-b border-slate-700/60 p-3"
+                  >
+                    <input
+                      ref={materialInputRef}
+                      type="file"
+                      accept={EXTENSIONES_MATERIALES.join(',')}
+                      onChange={handleSeleccionarArchivo}
+                      className="sr-only"
+                      aria-label="Seleccionar material de estudio"
+                    />
+
+                    {archivoSeleccionado ? (
+                      <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-2.5">
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${
+                            iconoDeMaterial(archivoSeleccionado.name).clase
+                          }`}
+                        >
+                          {iconoDeMaterial(archivoSeleccionado.name).emoji}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-[11px] font-semibold text-slate-200"
+                            title={archivoSeleccionado.name}
+                          >
+                            {archivoSeleccionado.name}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-slate-500">
+                            {formatearTamano(archivoSeleccionado.size)} · Listo
+                            para subir
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={limpiarArchivo}
+                          disabled={subiendoMaterial}
+                          aria-label="Quitar archivo seleccionado"
+                          className="rounded-lg px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => materialInputRef.current?.click()}
+                        className="w-full rounded-xl border border-dashed border-slate-600 bg-slate-900/40 px-3 py-4 text-center transition-colors hover:border-blue-500/60 hover:bg-slate-900/70"
+                      >
+                        <span className="block text-lg">📎</span>
+                        <span className="mt-1 block text-[11px] font-semibold text-slate-300">
+                          Elegir archivo
+                        </span>
+                        <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">
+                          PDF, Word, PowerPoint, Excel, TXT o imágenes · máx.
+                          10 MB
+                        </span>
+                      </button>
+                    )}
+
+                    {archivoSeleccionado && (
+                      <>
+                        <input
+                          type="text"
+                          value={descripcionMaterial}
+                          onChange={(e) =>
+                            setDescripcionMaterial(e.target.value)
+                          }
+                          maxLength={MAX_DESCRIPCION_MATERIAL}
+                          disabled={subiendoMaterial}
+                          placeholder="Descripción opcional"
+                          aria-label="Descripción del material"
+                          className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] disabled:opacity-60"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={limpiarArchivo}
+                            disabled={subiendoMaterial}
+                            className="rounded-lg bg-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-200 transition-colors hover:bg-slate-600 disabled:opacity-60"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={subiendoMaterial}
+                            className="rounded-lg bg-[#0B4FC4] px-2.5 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {subiendoMaterial ? 'Subiendo…' : 'Subir material'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </form>
+
+                  {errorMateriales && (
+                    <div
+                      role="alert"
+                      className="mx-3 mt-2 flex items-start justify-between gap-2 rounded-lg border border-red-700/60 bg-red-900/30 px-2.5 py-2 text-[10px] leading-relaxed text-red-200"
+                    >
+                      <span>{errorMateriales}</span>
+                      {materiales.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => cargarMateriales()}
+                          disabled={cargandoMateriales}
+                          className="shrink-0 rounded-lg bg-red-800/60 px-2 py-1 font-bold text-red-100 transition-colors hover:bg-red-700 disabled:opacity-60"
+                        >
+                          Reintentar
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+                    {cargandoMateriales ? (
+                      <div className="flex h-full flex-col items-center justify-center text-center">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-blue-400" />
+                        <p className="mt-3 text-[11px] text-slate-400">
+                          Cargando materiales…
+                        </p>
+                      </div>
+                    ) : materiales.length === 0 ? (
+                      <div className="flex h-full flex-col items-center justify-center text-center">
+                        <div className="text-3xl mb-3">📄</div>
+                        <p className="text-xs font-semibold text-slate-300">
+                          Aún no hay materiales
+                        </p>
+                        <p className="mt-1 max-w-[230px] text-[11px] leading-relaxed text-slate-500">
+                          Sube guías, talleres o apuntes para que el grupo los
+                          tenga a mano.
+                        </p>
+                      </div>
+                    ) : (
+                      materiales.map((material) => {
+                        const icono = iconoDeMaterial(material.nombre);
+                        const confirmando =
+                          confirmarEliminarId === material.id;
+
+                        return (
+                          <div
+                            key={material.id}
+                            className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-2.5"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <div
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${icono.clase}`}
+                              >
+                                {icono.emoji}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className="break-words text-[11px] font-semibold leading-snug text-slate-200"
+                                  title={material.nombre}
+                                >
+                                  {material.nombre}
+                                </p>
+                                {material.descripcion && (
+                                  <p className="mt-0.5 break-words text-[10px] leading-relaxed text-slate-400">
+                                    {material.descripcion}
+                                  </p>
+                                )}
+                                <p className="mt-1 text-[9px] text-slate-500">
+                                  {material.usuario.id === user.id
+                                    ? 'Tú'
+                                    : material.usuario.nombre}{' '}
+                                  · {fechaCortaDe(material.creadoEn)} ·{' '}
+                                  {formatearTamano(material.tamano)}
+                                </p>
+                              </div>
+                            </div>
+
+                            {confirmando ? (
+                              <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-red-900/20 px-2 py-1.5">
+                                <span className="text-[10px] text-red-200">
+                                  ¿Eliminar este material?
+                                </span>
+                                <div className="flex shrink-0 gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmarEliminarId(null)}
+                                    disabled={
+                                      eliminandoMaterialId === material.id
+                                    }
+                                    className="rounded-lg bg-slate-700 px-2 py-1 text-[10px] font-bold text-slate-200 transition-colors hover:bg-slate-600 disabled:opacity-60"
+                                  >
+                                    No
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleEliminarMaterial(material)
+                                    }
+                                    disabled={
+                                      eliminandoMaterialId === material.id
+                                    }
+                                    className="rounded-lg bg-red-600 px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {eliminandoMaterialId === material.id
+                                      ? 'Eliminando…'
+                                      : 'Sí, eliminar'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mt-2 flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDescargarMaterial(material)
+                                  }
+                                  disabled={
+                                    descargandoMaterialId === material.id
+                                  }
+                                  className="rounded-lg bg-slate-700 px-2 py-1 text-[10px] font-bold text-slate-200 transition-colors hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {descargandoMaterialId === material.id
+                                    ? 'Descargando…'
+                                    : '↓ Descargar'}
+                                </button>
+                                {material.puedeEliminar && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setConfirmarEliminarId(material.id)
+                                    }
+                                    aria-label={`Eliminar ${material.nombre}`}
+                                    className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-300 transition-colors hover:bg-red-600 hover:text-white"
+                                  >
+                                    Eliminar
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

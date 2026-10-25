@@ -26,6 +26,9 @@ prisma/prod.db
 *.sqlite
 *.sqlite3
 
+# --- Archivos subidos por los usuarios ---
+backend/uploads/
+
 # --- Environment & Secrets ---
 .env
 .env.local

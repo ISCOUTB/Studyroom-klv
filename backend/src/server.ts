@@ -120,6 +120,10 @@ httpServer.listen(PORT, () => {
   console.log('   POST   /api/salas                   (requiere JWT)');
   console.log('   GET    /api/salas/:id               (requiere JWT)');
   console.log('   GET    /api/salas/:id/mensajes      (requiere JWT)');
+  console.log('   GET    /api/salas/:id/materiales    (requiere JWT)');
+  console.log('   POST   /api/salas/:id/materiales    (requiere JWT, multipart)');
+  console.log('   GET    /api/salas/:id/materiales/:materialId/descargar');
+  console.log('   DELETE /api/salas/:id/materiales/:materialId');
   console.log('   POST   /api/salas/:id/unirse        (requiere JWT)');
   console.log('   POST   /api/salas/:id/abandonar     (requiere JWT)');
   console.log('   WS     /socket.io                   (chat con JWT)');
