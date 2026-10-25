@@ -1,6 +1,12 @@
 import { Response } from 'express';
 import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
+import {
+  crearNotificacion,
+  crearNotificaciones,
+  formatearFechaNotificacion,
+} from '../notificaciones/notificaciones.service';
+import { actualizarSolicitudesExpiradas } from './tutorias.service';
 
 const MODALIDADES: Record<string, 'VIRTUAL' | 'PRESENCIAL'> = {
   virtual: 'VIRTUAL',
@@ -154,13 +160,6 @@ function listaAsignaturas(value: unknown): string[] {
   }
 
   return unicas;
-}
-
-async function actualizarSolicitudesExpiradas(): Promise<void> {
-  await prisma.tutoria.updateMany({
-    where: { estado: 'SOLICITADA', expiraEn: { lt: new Date() } },
-    data: { estado: 'EXPIRADA' },
-  });
 }
 
 async function obtenerTutorAprobado(usuarioId: string) {
@@ -347,6 +346,39 @@ export const solicitarMonitor = async (req: AuthRequest, res: Response) => {
       await prisma.tutor.update({ where: { id: req.user.id }, data: datos });
     } else {
       await prisma.tutor.create({ data: { id: req.user.id, ...datos } });
+    }
+
+    // Avisar a todos los administradores para que revisen la postulación.
+    // Es best-effort: un fallo al notificar no invalida la solicitud guardada.
+    try {
+      const [solicitante, admins] = await Promise.all([
+        prisma.usuario.findUnique({
+          where: { id: req.user.id },
+          select: { nombre: true },
+        }),
+        prisma.usuario.findMany({
+          where: { rol: 'ADMINISTRADOR' },
+          select: { id: true },
+        }),
+      ]);
+
+      await crearNotificaciones(
+        admins.map((admin) => ({
+          usuarioId: admin.id,
+          tipo: 'SOLICITUD_MONITOR' as const,
+          titulo: existente
+            ? 'Solicitud de monitor actualizada'
+            : 'Nueva solicitud de monitor',
+          mensaje: `${solicitante?.nombre ?? 'Un estudiante'} ${
+            existente ? 'actualizó su' : 'envió una'
+          } solicitud para ser monitor de ${asignaturas.slice(0, 2).join(' y ')}${
+            asignaturas.length > 2 ? '…' : '.'
+          }`,
+          enlace: '/admin/monitores',
+        }))
+      );
+    } catch (error) {
+      console.error('[tutorias:solicitud-monitor:notificar]', error);
     }
 
     return res.status(existente ? 200 : 201).json({
@@ -616,6 +648,11 @@ export const eliminarDisponibilidad = async (req: AuthRequest, res: Response) =>
       });
     }
 
+    const pendientes = await prisma.tutoria.findMany({
+      where: { disponibilidadId: id, estado: 'SOLICITADA' },
+      select: { solicitanteId: true },
+    });
+
     await prisma.$transaction([
       prisma.tutoria.updateMany({
         where: { disponibilidadId: id, estado: 'SOLICITADA' },
@@ -623,6 +660,17 @@ export const eliminarDisponibilidad = async (req: AuthRequest, res: Response) =>
       }),
       prisma.disponibilidadMonitor.delete({ where: { id } }),
     ]);
+
+    await crearNotificaciones(
+      pendientes.map((pendiente) => ({
+        usuarioId: pendiente.solicitanteId,
+        tipo: 'TUTORIA_CANCELADA' as const,
+        titulo: 'Horario eliminado por el monitor',
+        mensaje:
+          'El monitor eliminó un bloque de disponibilidad con tu solicitud pendiente. Busca otro horario.',
+        enlace: '/tutorias#mis-tutorias',
+      }))
+    );
 
     return res.json({ message: 'Bloque de disponibilidad eliminado.' });
   } catch (error) {
@@ -835,6 +883,16 @@ export const solicitarTutoria = async (req: AuthRequest, res: Response) => {
       },
     });
 
+    await crearNotificacion({
+      usuarioId: monitor.id,
+      tipo: 'TUTORIA_SOLICITADA',
+      titulo: 'Nueva solicitud de tutoría',
+      mensaje: `${tutoria.solicitante.nombre} solicitó una tutoría para ${formatearFechaNotificacion(
+        inicio
+      )} (${ETIQUETA_MODALIDAD[modalidad]}).`,
+      enlace: '/tutorias#mis-tutorias',
+    });
+
     return res.status(201).json({
       message:
         'Solicitud de tutoría enviada. El monitor tiene 24 horas (o hasta el inicio del bloque) para responder.',
@@ -897,6 +955,17 @@ export const responderTutoria = async (req: AuthRequest, res: Response) => {
         where: { id },
         data: { estado: 'RECHAZADA', respondidaEn: new Date() },
       });
+
+      await crearNotificacion({
+        usuarioId: tutoria.solicitanteId,
+        tipo: 'TUTORIA_RECHAZADA',
+        titulo: 'Solicitud rechazada',
+        mensaje: `${tutoria.monitor.usuario.nombre} rechazó tu solicitud para ${formatearFechaNotificacion(
+          tutoria.programadaEn
+        )}. Puedes buscar otro horario.`,
+        enlace: '/tutorias#mis-tutorias',
+      });
+
       return res.json({ message: 'Solicitud rechazada.' });
     }
 
@@ -918,6 +987,18 @@ export const responderTutoria = async (req: AuthRequest, res: Response) => {
       return res.status(409).json({ error: 'Ese bloque ya tiene otra tutoría agendada.' });
     }
 
+    const otrasPendientes = await prisma.tutoria.findMany({
+      where: {
+        disponibilidadId: tutoria.disponibilidadId,
+        estado: 'SOLICITADA',
+        id: { not: id },
+      },
+      select: {
+        solicitanteId: true,
+        programadaEn: true,
+      },
+    });
+
     const ahora = new Date();
     await prisma.$transaction([
       prisma.tutoria.update({
@@ -932,6 +1013,27 @@ export const responderTutoria = async (req: AuthRequest, res: Response) => {
         },
         data: { estado: 'RECHAZADA', respondidaEn: ahora },
       }),
+    ]);
+
+    await crearNotificaciones([
+      {
+        usuarioId: tutoria.solicitanteId,
+        tipo: 'TUTORIA_ACEPTADA',
+        titulo: 'Tutoría aceptada',
+        mensaje: `${tutoria.monitor.usuario.nombre} aceptó tu tutoría para ${formatearFechaNotificacion(
+          tutoria.programadaEn
+        )}.`,
+        enlace: '/tutorias#mis-tutorias',
+      },
+      ...otrasPendientes.map((otra) => ({
+        usuarioId: otra.solicitanteId,
+        tipo: 'TUTORIA_RECHAZADA' as const,
+        titulo: 'Horario ya no disponible',
+        mensaje: `El monitor aceptó otra solicitud para ${formatearFechaNotificacion(
+          otra.programadaEn
+        )}. Busca otro horario disponible.`,
+        enlace: '/tutorias#mis-tutorias',
+      })),
     ]);
 
     return res.json({ message: 'Tutoría aceptada y agendada. Las demás solicitudes del bloque fueron rechazadas.' });
@@ -954,7 +1056,15 @@ export const cancelarTutoria = async (req: AuthRequest, res: Response) => {
   try {
     await actualizarSolicitudesExpiradas();
 
-    const tutoria = await prisma.tutoria.findUnique({ where: { id } });
+    const tutoria = await prisma.tutoria.findUnique({
+      where: { id },
+      include: {
+        solicitante: { select: { id: true, nombre: true } },
+        monitor: {
+          include: { usuario: { select: { id: true, nombre: true } } },
+        },
+      },
+    });
     if (!tutoria) {
       return res.status(404).json({ error: 'La tutoría no existe.' });
     }
@@ -971,6 +1081,43 @@ export const cancelarTutoria = async (req: AuthRequest, res: Response) => {
       where: { id },
       data: { estado: 'CANCELADA' },
     });
+
+    const fecha = formatearFechaNotificacion(tutoria.programadaEn);
+    const esSolicitante = tutoria.solicitanteId === req.user.id;
+    const esMonitor = tutoria.monitorId === req.user.id;
+    const notificaciones: Array<{
+      usuarioId: string;
+      tipo: 'TUTORIA_CANCELADA';
+      titulo: string;
+      mensaje: string;
+      enlace: string;
+    }> = [];
+
+    if (!esSolicitante) {
+      notificaciones.push({
+        usuarioId: tutoria.solicitanteId,
+        tipo: 'TUTORIA_CANCELADA',
+        titulo: 'Tutoría cancelada',
+        mensaje: esMonitor
+          ? `${tutoria.monitor.usuario.nombre} canceló la tutoría de ${fecha}.`
+          : `Un administrador canceló tu tutoría de ${fecha}.`,
+        enlace: '/tutorias#mis-tutorias',
+      });
+    }
+
+    if (!esMonitor) {
+      notificaciones.push({
+        usuarioId: tutoria.monitorId,
+        tipo: 'TUTORIA_CANCELADA',
+        titulo: 'Tutoría cancelada',
+        mensaje: esSolicitante
+          ? `${tutoria.solicitante.nombre} canceló la tutoría de ${fecha}.`
+          : `Un administrador canceló la tutoría de ${fecha} con ${tutoria.solicitante.nombre}.`,
+        enlace: '/tutorias#mis-tutorias',
+      });
+    }
+
+    await crearNotificaciones(notificaciones);
 
     return res.json({ message: 'Tutoría cancelada.' });
   } catch (error) {
@@ -990,7 +1137,14 @@ export const finalizarTutoria = async (req: AuthRequest, res: Response) => {
   const id = text(req.params.id);
 
   try {
-    const tutoria = await prisma.tutoria.findUnique({ where: { id } });
+    const tutoria = await prisma.tutoria.findUnique({
+      where: { id },
+      include: {
+        monitor: {
+          include: { usuario: { select: { nombre: true } } },
+        },
+      },
+    });
     if (!tutoria) {
       return res.status(404).json({ error: 'La tutoría no existe.' });
     }
@@ -1009,6 +1163,16 @@ export const finalizarTutoria = async (req: AuthRequest, res: Response) => {
     await prisma.tutoria.update({
       where: { id },
       data: { estado: 'FINALIZADA' },
+    });
+
+    await crearNotificacion({
+      usuarioId: tutoria.solicitanteId,
+      tipo: 'TUTORIA_FINALIZADA',
+      titulo: 'Tutoría finalizada',
+      mensaje: `${tutoria.monitor.usuario.nombre} finalizó la tutoría de ${formatearFechaNotificacion(
+        tutoria.programadaEn
+      )}.`,
+      enlace: '/tutorias#mis-tutorias',
     });
 
     return res.json({ message: 'Tutoría finalizada.' });

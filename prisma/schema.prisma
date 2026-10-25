@@ -48,6 +48,18 @@ enum EstadoParticipacionEnum {
   ABANDONO
 }
 
+enum TipoNotificacionEnum {
+  TUTORIA_SOLICITADA
+  TUTORIA_ACEPTADA
+  TUTORIA_RECHAZADA
+  TUTORIA_CANCELADA
+  TUTORIA_FINALIZADA
+  TUTORIA_EXPIRADA
+  MONITOR_APROBADO
+  MONITOR_RECHAZADO
+  SOLICITUD_MONITOR
+}
+
 model Usuario {
   id                String         @id @default(uuid())
   nombre            String
@@ -70,6 +82,7 @@ model Usuario {
   mensajes          MensajeChat[]
   materiales        MaterialEstudio[]
   tutoriasSolicitadas Tutoria[]    @relation("SolicitanteTutorias")
+  notificaciones    Notificacion[]
 
   @@map("usuarios")
 }
@@ -207,4 +220,19 @@ model MaterialEstudio {
 
   @@index([salaId, creadoEn])
   @@map("materiales_estudio")
+}
+
+model Notificacion {
+  id        String                 @id @default(uuid())
+  usuarioId String                 @map("usuario_id")
+  usuario   Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo      TipoNotificacionEnum
+  titulo    String                 @db.VarChar(120)
+  mensaje   String                 @db.VarChar(300)
+  enlace    String?                @db.VarChar(200)
+  leida     Boolean                @default(false)
+  creadaEn  DateTime               @default(now()) @map("creada_en")
+
+  @@index([usuarioId, leida, creadaEn])
+  @@map("notificaciones")
 }

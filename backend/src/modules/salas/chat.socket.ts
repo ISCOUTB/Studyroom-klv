@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import prisma from '../../config/prisma';
+import { registrarServidorRealtime, salaUsuario } from '../../shared/realtime';
 import {
   crearMensajeSala,
   esParticipanteActivo,
@@ -112,6 +113,7 @@ export async function expulsarUsuarioDeSala(
 
 export function registrarChat(io: Server) {
   ioRef = io;
+  registrarServidorRealtime(io);
 
   // Autenticación del WebSocket con el mismo JWT de la API.
   io.use(async (socket, next) => {
@@ -153,6 +155,9 @@ export function registrarChat(io: Server) {
   io.on('connection', (socket: Socket) => {
     const usuario = socket.data.user as UsuarioSocket;
     socket.data.salas = new Set<string>();
+
+    // Sala privada del usuario: recibe notificaciones en cualquier pantalla.
+    socket.join(salaUsuario(usuario.id));
 
     socket.on('sala:unirse', async (payload: any, ack?: Acuse) => {
       const salaId = String(payload?.salaId ?? '').trim();

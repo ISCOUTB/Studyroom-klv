@@ -7,6 +7,7 @@ import authRoutes from './modules/auth/auth.routes';
 import salasRoutes from './modules/salas/salas.routes';
 import tutoriasRoutes from './modules/tutorias/tutorias.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import notificacionesRoutes from './modules/notificaciones/notificaciones.routes';
 import { registrarChat } from './modules/salas/chat.socket';
 import { getCurrentUser } from './modules/auth/auth.controller';
 import {
@@ -81,6 +82,11 @@ app.get('/api/me', authMiddleware, getCurrentUser);
 app.use('/api/tutorias', tutoriasRoutes);
 
 // ---------------------------------------------------------
+// Notificaciones del usuario
+// ---------------------------------------------------------
+app.use('/api/notificaciones', notificacionesRoutes);
+
+// ---------------------------------------------------------
 // Administración (solo ADMINISTRADOR)
 // ---------------------------------------------------------
 app.use('/api/admin', adminRoutes);
@@ -136,8 +142,11 @@ httpServer.listen(PORT, () => {
   console.log('   POST   /api/tutorias/solicitud-monitor');
   console.log('   GET    /api/tutorias/disponibilidad (monitor)');
   console.log('   POST   /api/tutorias/disponibilidad (monitor)');
+  console.log('   GET    /api/notificaciones          (requiere JWT)');
+  console.log('   PATCH  /api/notificaciones/leer-todas');
+  console.log('   PATCH  /api/notificaciones/:id/leer');
   console.log('   GET    /api/admin/monitores         (solo ADMINISTRADOR)');
-  console.log('   WS     /socket.io                   (chat con JWT)');
+  console.log('   WS     /socket.io                   (chat y avisos con JWT)');
   console.log('   GET    /api/me                      (requiere JWT)');
   console.log('   GET    /health');
   console.log('============================================================');

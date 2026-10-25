@@ -4,11 +4,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { apiRequest } from '@/lib/api';
+import { useNotificaciones } from '@/lib/notifications-context';
 import { type MonitorAdmin, formatearFechaHora } from '@/lib/tutorias';
 
 export default function AdminMonitoresPage() {
   const { user, token, isLoading, logout } = useAuth();
+  const { ultimaNotificacion } = useNotificaciones();
   const router = useRouter();
 
   const [solicitudes, setSolicitudes] = useState<MonitorAdmin[]>([]);
@@ -55,6 +58,13 @@ export default function AdminMonitoresPage() {
     if (user.rol !== 'ADMINISTRADOR') return;
     cargar();
   }, [isLoading, user, token, router, cargar]);
+
+  // Una nueva postulación llega en tiempo real: refrescamos la lista.
+  useEffect(() => {
+    if (ultimaNotificacion?.tipo === 'SOLICITUD_MONITOR') {
+      cargar();
+    }
+  }, [ultimaNotificacion, cargar]);
 
   const responder = async (monitor: MonitorAdmin, aprobado: boolean) => {
     if (!token) return;
@@ -132,6 +142,7 @@ export default function AdminMonitoresPage() {
             >
               Tutorías
             </button>
+            <NotificationBell />
             <button
               onClick={logout}
               className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"

@@ -4,7 +4,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { apiRequest } from '@/lib/api';
+import { useNotificaciones } from '@/lib/notifications-context';
 import { inicialesDe } from '@/lib/salas';
 import {
   type ContextoTutorias,
@@ -20,6 +22,7 @@ type Tab = 'monitores' | 'tutorias';
 
 export default function TutoriasPage() {
   const { user, token, isLoading, logout } = useAuth();
+  const { ultimaNotificacion } = useNotificaciones();
   const router = useRouter();
 
   const [contexto, setContexto] = useState<ContextoTutorias | null>(null);
@@ -84,6 +87,43 @@ export default function TutoriasPage() {
 
     cargarDatos();
   }, [isLoading, user, token, router, cargarDatos]);
+
+  // Cualquier cambio en una tutoría refresca las tarjetas sin recargar la página.
+  useEffect(() => {
+    if (ultimaNotificacion?.tipo.startsWith('TUTORIA_')) {
+      cargarDatos();
+    }
+  }, [ultimaNotificacion, cargarDatos]);
+
+  // Enlaces como /tutorias#mis-tutorias abren directamente la pestaña correcta.
+  useEffect(() => {
+    const aplicarHash = () => {
+      if (window.location.hash === '#mis-tutorias') {
+        setTab('tutorias');
+      }
+    };
+
+    aplicarHash();
+    window.addEventListener('hashchange', aplicarHash);
+    window.addEventListener('utb:navegacion', aplicarHash);
+
+    return () => {
+      window.removeEventListener('hashchange', aplicarHash);
+      window.removeEventListener('utb:navegacion', aplicarHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (tab !== 'tutorias' || window.location.hash !== '#mis-tutorias') return;
+
+    const temporizador = window.setTimeout(() => {
+      document
+        .getElementById('mis-tutorias')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+
+    return () => window.clearTimeout(temporizador);
+  }, [tab, cargando]);
 
   const monitoresFiltrados = useMemo(() => {
     const termino = busqueda.trim().toLowerCase();
@@ -276,6 +316,8 @@ export default function TutoriasPage() {
                 Mi perfil
               </button>
             )}
+
+            <NotificationBell />
 
             <button
               onClick={logout}
@@ -536,7 +578,7 @@ export default function TutoriasPage() {
             )}
           </section>
         ) : (
-          <section className="space-y-8">
+          <section id="mis-tutorias" className="scroll-mt-24 space-y-8">
             <div>
               <h2 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider mb-3">
                 Tutorías activas

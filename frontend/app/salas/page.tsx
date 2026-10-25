@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useRouter } from 'next/navigation';
 import { apiRequest } from '@/lib/api';
 import {
@@ -216,10 +217,7 @@ export default function SalasPage() {
               📅 <span className="hidden sm:inline">Tutorías</span>
             </button>
 
-            <button className="relative p-2 text-slate-600 hover:text-[#0B4FC4] transition-colors">
-              🔔
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-            </button>
+            <NotificationBell />
 
             <button
               onClick={logout}

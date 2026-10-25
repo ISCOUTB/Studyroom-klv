@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
+import { crearNotificacion } from '../notificaciones/notificaciones.service';
 
 const ETIQUETA_MODALIDAD: Record<string, string> = {
   VIRTUAL: 'Virtual',
@@ -94,6 +95,15 @@ export const responderSolicitudMonitor = async (req: AuthRequest, res: Response)
         }),
       ]);
 
+      await crearNotificacion({
+        usuarioId: id,
+        tipo: 'MONITOR_APROBADO',
+        titulo: '¡Ya eres monitor!',
+        mensaje:
+          'Tu solicitud fue aprobada. Publica tus bloques de disponibilidad y empieza a recibir tutorías.',
+        enlace: '/perfil/monitor',
+      });
+
       return res.json({
         message: `${tutor.usuario.nombre} fue aprobado como monitor. Debe volver a iniciar sesión para ver su nuevo rol.`,
       });
@@ -106,6 +116,16 @@ export const responderSolicitudMonitor = async (req: AuthRequest, res: Response)
     }
 
     await prisma.tutor.delete({ where: { id } });
+
+    await crearNotificacion({
+      usuarioId: id,
+      tipo: 'MONITOR_RECHAZADO',
+      titulo: 'Solicitud de monitor rechazada',
+      mensaje:
+        'Tu solicitud para ser monitor no fue aprobada. Puedes actualizar tu perfil y volver a postularte.',
+      enlace: '/perfil/monitor',
+    });
+
     return res.json({ message: 'Solicitud de monitor rechazada y eliminada.' });
   } catch (error) {
     console.error('[admin:responder-monitor]', error);

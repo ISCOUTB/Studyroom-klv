@@ -19,11 +19,11 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ## Estructura del Stack
 
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
-- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales` y las tutorías en `/api/tutorias`, con la administración de monitores en `/api/admin/monitores`.
+- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales`, las tutorías en `/api/tutorias`, las notificaciones en `/api/notificaciones` y la administración de monitores en `/api/admin/monitores`.
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
 - **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con token de 24 h y recuperación de contraseña con token de 1 h.
 - **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del backend para desarrollo.
-- **Tiempo Real:** Socket.IO sobre el mismo servidor HTTP de Express. El chat usa el JWT de la API, valida la participación en la sala y persiste los mensajes en PostgreSQL.
+- **Tiempo Real:** Socket.IO sobre el mismo servidor HTTP de Express. El chat y las notificaciones usan el JWT de la API; el chat valida la participación en la sala, mientras que cada usuario autenticado se une a una sala privada para recibir sus avisos.
 
 ---
 
@@ -247,6 +247,65 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | `/admin/monitores` | Revisión, aprobación y rechazo de solicitudes de monitor. |
 
 Los enlaces a **Tutorías** están disponibles desde la pantalla de salas. Los monitores ven el acceso a su perfil y los administradores al panel de aprobación.
+
+---
+
+## Notificaciones en Tiempo Real
+
+Cada cambio relevante del ciclo de tutorías y de las postulaciones de monitor genera una **notificación persistente** en PostgreSQL. El usuario la recibe al instante si tiene la aplicación abierta y puede consultarla después desde la campanita.
+
+### Experiencia de usuario
+
+- **Campanita con contador** de avisos sin leer en `/salas`, `/salas/[id]`, `/tutorias`, `/perfil/monitor` y `/admin/monitores`.
+- **Panel desplegable** con las últimas 30 notificaciones, su tipo, mensaje, fecha relativa y estado de lectura.
+- **Aviso flotante (toast)** al recibir una notificación mientras la aplicación está abierta.
+- **Marcado individual o masivo** como leído, con actualización inmediata del contador.
+- **Enlaces de destino:** las tutorías abren `/tutorias#mis-tutorias` y las postulaciones abren `/admin/monitores` o `/perfil/monitor`, según corresponda.
+- Las pantallas abiertas **se actualizan solas** al recibir un aviso (lista de tutorías, postulaciones o perfil del monitor).
+- La campanita usa variante clara en las pantallas blancas y variante oscura dentro de la sala en vivo. El panel y el toast se adaptan desde 360 px.
+
+### Eventos notificados
+
+| Tipo | Destinatario | Cuándo se genera |
+| --- | --- | --- |
+| `TUTORIA_SOLICITADA` | Monitor | Un estudiante solicita uno de sus bloques. |
+| `TUTORIA_ACEPTADA` | Estudiante | El monitor acepta la tutoría. |
+| `TUTORIA_RECHAZADA` | Estudiante | El monitor rechaza la solicitud o el bloque fue ocupado por otra persona. |
+| `TUTORIA_CANCELADA` | La otra parte | Se cancela la tutoría o el monitor elimina un bloque con solicitudes pendientes. |
+| `TUTORIA_FINALIZADA` | Estudiante | El monitor finaliza una tutoría agendada. |
+| `TUTORIA_EXPIRADA` | Estudiante | Pasan 24 h (o llega la hora del bloque) sin respuesta del monitor. |
+| `SOLICITUD_MONITOR` | Administradores | Un estudiante envía o actualiza su postulación de monitor. |
+| `MONITOR_APROBADO` | Solicitante | Un administrador aprueba su postulación. |
+| `MONITOR_RECHAZADO` | Solicitante | Un administrador rechaza su postulación. |
+
+La expiración se ejecuta al consultar o responder tutorías y usa un `updateMany` condicionado por estado para **no duplicar avisos** si dos procesos coinciden. La creación de notificaciones es *best-effort*: si falla el aviso, la acción principal (agendar, aceptar, cancelar, etc.) no se interrumpe.
+
+### API de notificaciones
+
+Todas las rutas requieren `Authorization: Bearer <token>`.
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `GET` | `/api/notificaciones` | Devuelve las últimas 30 notificaciones del usuario y el total de no leídas. Acepta `?take=` (máximo 50). |
+| `PATCH` | `/api/notificaciones/leer-todas` | Marca todas las notificaciones del usuario como leídas y devuelve `noLeidas: 0`. |
+| `PATCH` | `/api/notificaciones/:id/leer` | Marca una notificación propia como leída. Responde `404` si pertenece a otro usuario. |
+
+### Socket.IO
+
+Al autenticarse, cada socket se une automáticamente a la sala privada `usuario:<id>`. El backend emite:
+
+| Dirección | Evento | Payload | Descripción |
+| --- | --- | --- | --- |
+| Servidor → Cliente | `notificacion:nueva` | `{ id, tipo, titulo, mensaje, enlace, leida, creadaEn }` | Aviso persistido, enviado a todas las sesiones abiertas del usuario. |
+
+El frontend mantiene una única conexión de notificaciones en el layout raíz (`NotificationsProvider`), independiente de la conexión del chat de una sala.
+
+### Persistencia
+
+- Tabla `notificaciones` con relación en cascada al usuario.
+- Campos: `id`, `usuario_id`, `tipo`, `titulo` (120), `mensaje` (300), `enlace` (200), `leida` y `creada_en`.
+- Índice `(usuario_id, leida, creada_en)` para el contador y el listado.
+- Migración: `prisma/migrations/20261025150000_notificaciones`.
 
 ---
 

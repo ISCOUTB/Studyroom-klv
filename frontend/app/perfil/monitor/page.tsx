@@ -4,7 +4,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { apiRequest } from '@/lib/api';
+import { useNotificaciones } from '@/lib/notifications-context';
 import { ASIGNATURAS, inicialesDe } from '@/lib/salas';
 import {
   type ContextoTutorias,
@@ -17,6 +19,7 @@ import {
 
 export default function PerfilMonitorPage() {
   const { user, token, isLoading, logout } = useAuth();
+  const { ultimaNotificacion } = useNotificaciones();
   const router = useRouter();
 
   const [contexto, setContexto] = useState<ContextoTutorias | null>(null);
@@ -108,6 +111,16 @@ export default function PerfilMonitorPage() {
 
     cargar();
   }, [isLoading, user, token, router, cargar]);
+
+  // Aprobación o rechazo de la postulación: actualizamos el perfil al instante.
+  useEffect(() => {
+    if (
+      ultimaNotificacion?.tipo === 'MONITOR_APROBADO' ||
+      ultimaNotificacion?.tipo === 'MONITOR_RECHAZADO'
+    ) {
+      cargar();
+    }
+  }, [ultimaNotificacion, cargar]);
 
   const agregarAsignatura = (valor: string) => {
     const asignatura = valor.trim();
@@ -277,6 +290,7 @@ export default function PerfilMonitorPage() {
                 Monitores
               </button>
             )}
+            <NotificationBell />
             <button
               onClick={logout}
               className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"

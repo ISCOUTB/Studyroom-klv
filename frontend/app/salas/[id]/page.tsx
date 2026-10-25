@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useParams, useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
 import { apiRequest, API_URL } from '@/lib/api';
@@ -678,11 +679,13 @@ export default function SalaEnVivoPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3 sm:gap-6">
           <div className="hidden sm:flex items-center gap-2 bg-slate-700/50 px-4 py-2 rounded-xl border border-slate-700 text-xs font-mono">
             <span>⏱️</span>
             <span className="text-emerald-400 font-bold">{formatTime(cronometro)}</span>
           </div>
+
+          <NotificationBell variant="dark" />
 
           {sala.participando ? (
             <button
