@@ -17,7 +17,7 @@ export const authMiddleware = (
   const [scheme, token] = authHeader?.split(' ') ?? [];
 
   if (!token || scheme?.toLowerCase() !== 'bearer') {
-    return res.status(401).json({ error: 'Token no proporcionado. Inicia sesión.' });
+    return res.status(401).json({ error: 'Tu sesión no está activa. Inicia sesión.' });
   }
 
   try {
@@ -28,7 +28,7 @@ export const authMiddleware = (
     };
 
     if (!decoded.id || !decoded.rol) {
-      return res.status(401).json({ error: 'Token inválido o incompleto.' });
+      return res.status(401).json({ error: 'Tu sesión no es válida o está incompleta.' });
     }
 
     req.user = {
@@ -38,7 +38,7 @@ export const authMiddleware = (
     };
     return next();
   } catch {
-    return res.status(401).json({ error: 'Token inválido o expirado.' });
+    return res.status(401).json({ error: 'Tu sesión no es válida o expiró.' });
   }
 };
 

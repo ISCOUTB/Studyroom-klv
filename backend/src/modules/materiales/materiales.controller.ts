@@ -131,7 +131,7 @@ export const recibirArchivo = (
     if ((error as { code?: string }).code === 'FORMATO_NO_PERMITIDO') {
       return res.status(400).json({
         error:
-          'Formato no permitido. Puedes subir PDF, Word, PowerPoint, Excel, TXT o imágenes JPG/PNG/WEBP.',
+          'Formato no permitido. Puedes subir PDF, documentos, presentaciones, hojas de cálculo, texto o imágenes JPG, PNG o WEBP.',
       });
     }
 

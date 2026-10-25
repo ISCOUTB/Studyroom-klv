@@ -100,7 +100,7 @@ export async function expulsarUsuarioDeSala(
 
     socket.emit('sala:expulsado', {
       salaId,
-      motivo: 'Tu participación en la sala terminó. Vuelve a unirte para usar el chat.',
+      motivo: 'Tu participación en la sala terminó. Vuelve a unirte para usar la mensajería.',
     });
 
     huboCambios = true;
@@ -128,12 +128,12 @@ export function registrarChat(io: Server) {
             : '';
 
       if (!token) {
-        return next(new Error('Token no proporcionado. Inicia sesión.'));
+        return next(new Error('Tu sesión no está activa. Inicia sesión.'));
       }
 
       const decoded = jwt.verify(token, getJwtSecret()) as { id?: string };
       if (!decoded.id) {
-        return next(new Error('Token inválido.'));
+        return next(new Error('Tu sesión no es válida.'));
       }
 
       const usuario = await prisma.usuario.findUnique({
@@ -148,7 +148,7 @@ export function registrarChat(io: Server) {
       socket.data.user = usuario;
       return next();
     } catch {
-      return next(new Error('Token inválido o expirado.'));
+      return next(new Error('Tu sesión no es válida o expiró.'));
     }
   });
 
@@ -183,7 +183,7 @@ export function registrarChat(io: Server) {
         if (!participa) {
           return responder(ack, {
             ok: false,
-            error: 'Únete a la sala para participar en el chat.',
+            error: 'Únete a la sala para participar en la mensajería.',
           });
         }
 
@@ -200,7 +200,7 @@ export function registrarChat(io: Server) {
         console.error('[chat:unirse]', error);
         return responder(ack, {
           ok: false,
-          error: 'No se pudo conectar al chat de la sala.',
+          error: 'No se pudo conectar a la mensajería de la sala.',
         });
       }
     });
@@ -239,7 +239,7 @@ export function registrarChat(io: Server) {
       if (!socket.data.salas.has(salaId)) {
         return responder(ack, {
           ok: false,
-          error: 'Primero debes unirte al chat de la sala.',
+          error: 'Primero debes unirte a la mensajería de la sala.',
         });
       }
 

@@ -81,7 +81,8 @@ export default function RecuperarPage() {
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">{mensaje}</p>
           <p className="mt-3 text-xs leading-relaxed text-slate-400">
-            El enlace vence en 1 hora. Si no lo ves, revisa la carpeta de spam.
+            El enlace vence en 1 hora. Si no lo ves, revisa la carpeta de
+            correo no deseado.
           </p>
 
           <Link href="/login" className={`${AUTH_BUTTON_CLASS} mt-6`}>

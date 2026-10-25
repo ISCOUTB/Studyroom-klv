@@ -268,7 +268,7 @@ export const listarMensajes = async (req: AuthRequest, res: Response) => {
     const participa = await esParticipanteActivo(salaId, req.user.id);
     if (!participa) {
       return res.status(403).json({
-        error: 'Únete a la sala para ver el historial del chat.',
+        error: 'Únete a la sala para ver el historial de mensajes.',
       });
     }
 
@@ -276,7 +276,7 @@ export const listarMensajes = async (req: AuthRequest, res: Response) => {
     return res.json({ mensajes });
   } catch (error) {
     console.error('[salas:mensajes]', error);
-    return res.status(500).json({ error: 'No se pudo cargar el chat de la sala.' });
+    return res.status(500).json({ error: 'No se pudo cargar la mensajería de la sala.' });
   }
 };
 
@@ -356,7 +356,7 @@ export const abandonarSala = async (req: AuthRequest, res: Response) => {
       data: { estado: 'ABANDONO' },
     });
 
-    // Si tenía el chat abierto, se le saca del canal en tiempo real.
+    // Si tenía la mensajería abierta, se le saca del canal en tiempo real.
     await expulsarUsuarioDeSala(salaId, req.user.id);
 
     return res.json({ message: 'Saliste de la sala de estudio.' });

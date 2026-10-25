@@ -32,7 +32,7 @@ export default function VerificarPage() {
 
     if (!token) {
       setEstado('sin-token');
-      setMensaje('El enlace no contiene un token de verificación.');
+      setMensaje('El enlace no contiene un código de verificación.');
       return;
     }
 

@@ -105,7 +105,7 @@ export default function RestablecerPage() {
             Enlace incompleto
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
-            El enlace no contiene un token de recuperación. Solicita uno nuevo
+            El enlace no contiene un código de recuperación. Solicita uno nuevo
             desde la pantalla de recuperación.
           </p>
           <Link href="/recuperar" className={`${AUTH_BUTTON_CLASS} mt-6`}>

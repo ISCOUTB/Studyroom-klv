@@ -16,7 +16,7 @@ export async function apiRequest<T = any>(
     res = await fetch(`${API_URL}${path}`, options);
   } catch {
     throw new Error(
-      'No se pudo conectar con el servidor. Verifica que el backend esté encendido.'
+      'No se pudo conectar con el servidor. Verifica que el servicio esté encendido.'
     );
   }
 

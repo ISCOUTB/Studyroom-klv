@@ -82,7 +82,7 @@ export default function SalaEnVivoPage() {
   const [cronometro, setCronometro] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
 
-  // Chat en tiempo real
+  // Mensajería en tiempo real
   const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
   const [mensajeTexto, setMensajeTexto] = useState('');
@@ -168,7 +168,7 @@ export default function SalaEnVivoPage() {
       setErrorChat(
         err instanceof Error
           ? err.message
-          : 'No se pudo cargar el historial del chat.'
+          : 'No se pudo cargar el historial de mensajes.'
       );
     } finally {
       setCargandoHistorial(false);
@@ -255,7 +255,7 @@ export default function SalaEnVivoPage() {
     };
   }, []);
 
-  // Conexión del chat: solo para participantes activos de la sala.
+  // Conexión de la mensajería: solo para participantes activos de la sala.
   useEffect(() => {
     if (!token || !salaId || !sala?.participando) {
       setConectadoChat(false);
@@ -278,13 +278,13 @@ export default function SalaEnVivoPage() {
         (timeoutError: Error | null, respuesta: { ok?: boolean; error?: string }) => {
           if (timeoutError) {
             setConectadoChat(false);
-            setErrorChat('El chat tardó demasiado en responder. Reintentando…');
+            setErrorChat('La mensajería tardó demasiado en responder. Reintentando…');
             return;
           }
           if (!respuesta?.ok) {
             setConectadoChat(false);
             setErrorChat(
-              respuesta?.error || 'No se pudo conectar al chat de la sala.'
+              respuesta?.error || 'No se pudo conectar a la mensajería de la sala.'
             );
             return;
           }
@@ -305,11 +305,11 @@ export default function SalaEnVivoPage() {
     socket.on('connect_error', (error: Error) => {
       setConectadoChat(false);
       const mensaje = error?.message || '';
-      const esMensajeDelServidor = /token|usuario|sala|particip/i.test(mensaje);
+      const esMensajeDelServidor = /sesión|usuario|sala|particip/i.test(mensaje);
       setErrorChat(
         esMensajeDelServidor
           ? mensaje
-          : 'No se pudo conectar al chat. Reintentando…'
+          : 'No se pudo conectar a la mensajería. Reintentando…'
       );
     });
     socket.on('mensaje:nuevo', (mensaje: MensajeChat) => {
@@ -331,7 +331,7 @@ export default function SalaEnVivoPage() {
         setUsuariosEnLinea([]);
         setErrorChat(
           payload.motivo ||
-            'Tu participación en la sala terminó. Vuelve a unirte para usar el chat.'
+            'Tu participación en la sala terminó. Vuelve a unirte para usar la mensajería.'
         );
         setSala((prev) =>
           prev
@@ -474,7 +474,7 @@ export default function SalaEnVivoPage() {
       setArchivoSeleccionado(null);
       e.target.value = '';
       setErrorMateriales(
-        'Formato no permitido. Puedes subir PDF, Word, PowerPoint, Excel, TXT o imágenes JPG/PNG/WEBP.'
+        'Formato no permitido. Puedes subir PDF, documentos, presentaciones, hojas de cálculo, texto o imágenes JPG, PNG o WEBP.'
       );
       return;
     }
@@ -654,13 +654,16 @@ export default function SalaEnVivoPage() {
   const estadoConexion = !isOnline
     ? { color: 'bg-red-500', texto: 'Sin conexión a internet' }
     : !sala.participando
-      ? { color: 'bg-slate-500', texto: 'Chat disponible al unirte a la sala' }
+      ? {
+          color: 'bg-slate-500',
+          texto: 'Mensajería disponible al unirte a la sala',
+        }
       : conectadoChat
         ? {
             color: 'bg-emerald-400',
-            texto: `Chat conectado · ${usuariosEnLinea.length} en línea`,
+            texto: `Mensajería conectada · ${usuariosEnLinea.length} en línea`,
           }
-        : { color: 'bg-amber-400', texto: 'Conectando al chat…' };
+        : { color: 'bg-amber-400', texto: 'Conectando a la mensajería…' };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
@@ -745,7 +748,7 @@ export default function SalaEnVivoPage() {
             {/* Videollamada marcador */}
             <div className="bg-slate-800 rounded-2xl border border-slate-700 relative overflow-hidden flex flex-col items-center justify-center p-6 text-center">
               <div className="absolute top-3 left-3 bg-slate-900/80 px-3 py-1 rounded-lg text-xs font-medium text-slate-300">
-                📹 Videollamada (Jitsi / WebRTC Próximamente)
+                📹 Videollamada (próximamente)
               </div>
               <div className="w-20 h-20 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center text-3xl font-bold mb-3 border border-blue-500/30">
                 👥
@@ -762,7 +765,7 @@ export default function SalaEnVivoPage() {
             {/* Pizarra marcador */}
             <div className="bg-slate-800 rounded-2xl border border-slate-700 relative overflow-hidden flex flex-col items-center justify-center p-6 text-center">
               <div className="absolute top-3 left-3 bg-slate-900/80 px-3 py-1 rounded-lg text-xs font-medium text-slate-300">
-                ✏️ Pizarra Colaborativa (tldraw Próximamente)
+                ✏️ Pizarra colaborativa (próximamente)
               </div>
               <div className="w-20 h-20 bg-emerald-600/20 text-emerald-400 rounded-full flex items-center justify-center text-3xl font-bold mb-3 border border-emerald-500/30">
                 📐
@@ -778,7 +781,7 @@ export default function SalaEnVivoPage() {
           </div>
         </div>
 
-        {/* Panel Lateral: Chat | Participantes | Materiales (Referencia visual 5 derecha) */}
+        {/* Panel Lateral: Mensajería | Participantes | Materiales (Referencia visual 5 derecha) */}
         <div className="w-full lg:w-96 bg-slate-800 border-t lg:border-t-0 lg:border-l border-slate-700 flex flex-col h-[450px] lg:h-auto">
           <div className="p-3 border-b border-slate-700 flex items-center justify-between">
             <div className="flex gap-1 bg-slate-900 p-1 rounded-xl w-full">
@@ -790,7 +793,7 @@ export default function SalaEnVivoPage() {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Chat
+                Mensajes
               </button>
               <button
                 onClick={() => setActiveTab('participantes')}
@@ -846,7 +849,7 @@ export default function SalaEnVivoPage() {
                   <div className="flex h-full flex-col items-center justify-center text-center">
                     <div className="text-3xl mb-3">💬</div>
                     <p className="text-xs font-semibold text-slate-300">
-                      Únete para participar en el chat
+                      Únete para participar en la mensajería
                     </p>
                     <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
                       Solo los participantes activos de la sala pueden leer y
@@ -932,12 +935,12 @@ export default function SalaEnVivoPage() {
                   disabled={!puedeEscribir || enviandoMensaje}
                   placeholder={
                     !sala.participando
-                      ? 'Únete para escribir en el chat'
+                      ? 'Únete para escribir en la mensajería'
                       : !conectadoChat
-                        ? 'Conectando al chat…'
+                        ? 'Conectando a la mensajería…'
                         : 'Escribe un mensaje…'
                   }
-                  aria-label="Mensaje del chat"
+                  aria-label="Mensaje para la sala"
                   className="flex-1 min-w-0 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <button
@@ -1104,8 +1107,8 @@ export default function SalaEnVivoPage() {
                           Elegir archivo
                         </span>
                         <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">
-                          PDF, Word, PowerPoint, Excel, TXT o imágenes · máx.
-                          10 MB
+                          PDF, documentos, presentaciones, hojas de cálculo,
+                          texto o imágenes · máx. 10 MB
                         </span>
                       </button>
                     )}

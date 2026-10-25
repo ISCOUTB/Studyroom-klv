@@ -109,7 +109,7 @@ app.use(
 );
 
 // ---------------------------------------------------------
-// Chat en tiempo real (Socket.IO sobre el mismo servidor)
+// Mensajería en tiempo real (Socket.IO sobre el mismo servidor)
 // ---------------------------------------------------------
 registrarChat(io);
 
@@ -152,7 +152,7 @@ httpServer.listen(PORT, () => {
   console.log('   PATCH  /api/notificaciones/leer-todas');
   console.log('   PATCH  /api/notificaciones/:id/leer');
   console.log('   GET    /api/admin/monitores         (solo ADMINISTRADOR)');
-  console.log('   WS     /socket.io                   (chat y avisos con JWT)');
+  console.log('   WS     /socket.io                   (mensajería y avisos con JWT)');
   console.log('   GET    /api/me                      (requiere JWT)');
   console.log('   GET    /health');
   console.log('============================================================');

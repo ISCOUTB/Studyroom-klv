@@ -1,7 +1,7 @@
 # Campus Collaborative Study — Universidad Tecnológica de Bolívar (UTB)
 
 Plataforma colaborativa web (responsive desde 360px) para estudiantes de primeros semestres (Cálculo, Física, Álgebra, Estadística) que permite:
-1. **Unirse a salas de estudio simultáneo** y resolver ejercicios en conjunto con chat en tiempo real (< 2s) y control de cupo configurable (2 a 50 participantes, 10 por defecto).
+1. **Unirse a salas de estudio simultáneo** y resolver ejercicios en conjunto con mensajería en tiempo real (< 2s) y control de cupo configurable (2 a 50 participantes, 10 por defecto).
 2. **Agendar tutorías con estudiantes avanzados (monitores)**, seleccionando modalidad (Virtual / Presencial con ubicación en campus ej. "Bloque C · Salón 204") y bloques de disponibilidad horaria.
 
 Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206).
@@ -21,9 +21,9 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
 - **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales`, las tutorías en `/api/tutorias`, las notificaciones en `/api/notificaciones` y la administración de monitores en `/api/admin/monitores`.
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
-- **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con token de 24 h y recuperación de contraseña con token de 1 h.
-- **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del backend para desarrollo.
-- **Tiempo Real:** Socket.IO sobre el mismo servidor HTTP de Express. El chat y las notificaciones usan el JWT de la API; el chat valida la participación en la sala, mientras que cada usuario autenticado se une a una sala privada para recibir sus avisos.
+- **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con enlace válido por 24 h y recuperación de contraseña con enlace válido por 1 h.
+- **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del servicio para desarrollo.
+- **Tiempo Real:** Socket.IO sobre el mismo servidor HTTP de Express. La mensajería y las notificaciones usan el JWT de la API; la mensajería valida la participación en la sala, mientras que cada usuario autenticado se une a una sala privada para recibir sus avisos.
 
 ---
 
@@ -101,12 +101,12 @@ URL base: `http://localhost:3001`
 | Método | Endpoint | Descripción |
 | --- | --- | --- |
 | `POST` | `/api/auth/registro` | Crea la cuenta (correo `@utb.edu.co`) y envía el enlace de verificación. |
-| `GET` | `/api/auth/verificar/:token` | Verifica el correo con el token de 24 h. |
+| `GET` | `/api/auth/verificar/:token` | Verifica el correo con el enlace enviado (válido por 24 h). |
 | `POST` | `/api/auth/reenviar-verificacion` | Genera y envía un nuevo enlace de verificación. |
 | `POST` | `/api/auth/login` | Inicia sesión si el correo está verificado. Devuelve JWT (8 h). |
 | `GET` | `/api/auth/me` | Devuelve el usuario autenticado. Requiere `Authorization: Bearer <token>`. |
-| `POST` | `/api/auth/recuperar` | Envía el enlace de recuperación (token de 1 h). |
-| `POST` | `/api/auth/restablecer` | Cambia la contraseña usando el token de recuperación. |
+| `POST` | `/api/auth/recuperar` | Envía el enlace de recuperación (válido por 1 h). |
+| `POST` | `/api/auth/restablecer` | Cambia la contraseña usando el código del enlace de recuperación. |
 
 El login rechaza las cuentas cuyo correo aún no esté verificado. Las rutas protegidas validan el JWT y los roles `ESTUDIANTE`, `TUTOR` y `ADMINISTRADOR`.
 
@@ -115,9 +115,9 @@ El login rechaza las cuentas cuyo correo aún no esté verificado. Las rutas pro
 | Ruta | Descripción |
 | --- | --- |
 | `/login` | Inicio de sesión y registro. Al registrarse, la cuenta queda pendiente de verificación y la pantalla vuelve a "Ingresar" con el correo escrito. |
-| `/verificar?token=...` | Verifica el correo con el enlace enviado. Si el token expiró o ya se usó, permite solicitar uno nuevo. |
+| `/verificar?token=...` | Verifica el correo con el enlace enviado. Si el enlace expiró o ya se usó, permite solicitar uno nuevo. |
 | `/recuperar` | Solicita el enlace de recuperación. Por seguridad, siempre responde con el mismo mensaje, exista o no la cuenta. |
-| `/restablecer?token=...` | Permite crear la nueva contraseña (mínimo 8 caracteres y confirmación). El token de recuperación vence en 1 hora. |
+| `/restablecer?token=...` | Permite crear la nueva contraseña (mínimo 8 caracteres y confirmación). El enlace de recuperación vence en 1 hora. |
 
 El JWT se guarda en `localStorage` bajo la clave `utb_token` y la sesión se rehidrata consultando `/api/auth/me` al recargar la página.
 
@@ -133,8 +133,8 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | `POST` | `/api/salas` | Crea una sala. El usuario autenticado queda como anfitrión y primer participante. |
 | `GET` | `/api/salas/:id` | Devuelve el detalle de una sala y sus participantes activos. |
 | `POST` | `/api/salas/:id/unirse` | Une al usuario autenticado a la sala (valida el cupo). |
-| `POST` | `/api/salas/:id/abandonar` | Marca la participación del usuario como abandonada y lo saca del chat en tiempo real. |
-| `GET` | `/api/salas/:id/mensajes` | Devuelve los últimos 100 mensajes del chat en orden cronológico. Solo para participantes activos. |
+| `POST` | `/api/salas/:id/abandonar` | Marca la participación del usuario como abandonada y lo saca de la mensajería en tiempo real. |
+| `GET` | `/api/salas/:id/mensajes` | Devuelve los últimos 100 mensajes de la sala en orden cronológico. Solo para participantes activos. |
 | `GET` | `/api/salas/:id/materiales` | Lista los materiales de la sala, del más reciente al más antiguo. Solo para participantes activos. |
 | `POST` | `/api/salas/:id/materiales` | Sube un archivo (`multipart/form-data`, campo `archivo`) con descripción opcional (máx. 300 caracteres). Solo para participantes activos. |
 | `GET` | `/api/salas/:id/materiales/:materialId/descargar` | Descarga el archivo original. Requiere JWT y participación activa. |
@@ -145,13 +145,13 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | Ruta | Descripción |
 | --- | --- |
 | `/salas` | Listado real desde la API, búsqueda, filtros por asignatura/estado, creación de salas y acceso a cada sala. |
-| `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye chat en tiempo real con historial y presencia, y la pestaña de materiales con carga, descarga y eliminación de archivos. |
+| `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye mensajería en tiempo real con historial y presencia, y la pestaña de materiales con carga, descarga y eliminación de archivos. |
 
 ---
 
-## Chat en Tiempo Real
+## Mensajería en Tiempo Real
 
-El chat usa **Socket.IO** en `http://localhost:3001/socket.io`, sobre el mismo servidor HTTP de Express. No requiere credenciales de servicios externos.
+La mensajería usa **Socket.IO** en `http://localhost:3001/socket.io`, sobre el mismo servidor HTTP de Express. No requiere credenciales de servicios externos.
 
 - El cliente se conecta con `auth: { token }` usando el mismo JWT de la API.
 - Solo los participantes con `ParticipacionSala.estado = ACTIVO` pueden leer el historial, unirse al canal y enviar mensajes.
@@ -167,7 +167,7 @@ El chat usa **Socket.IO** en `http://localhost:3001/socket.io`, sobre el mismo s
 | Cliente → Servidor | `sala:salir` | `{ salaId }` | Sale del canal y actualiza la presencia. |
 | Cliente → Servidor | `mensaje:enviar` | `{ salaId, contenido }` | Guarda y difunde el mensaje (máximo 500 caracteres). |
 | Servidor → Cliente | `mensaje:nuevo` | `{ id, contenido, enviadoEn, usuario }` | Mensaje persistido que reciben todos los participantes conectados. |
-| Servidor → Cliente | `presencia:actualizada` | `{ salaId, usuarios }` | IDs de los usuarios con el chat abierto. |
+| Servidor → Cliente | `presencia:actualizada` | `{ salaId, usuarios }` | IDs de los usuarios con la mensajería abierta. |
 | Servidor → Cliente | `sala:expulsado` | `{ salaId, motivo }` | El usuario dejó de ser participante activo de la sala. |
 
 Los eventos que modifican estado responden con un `ack` en formato `{ ok, error }`. La interfaz usa la petición HTTP del historial y mantiene el orden cronológico de los mensajes.
@@ -299,7 +299,7 @@ Al autenticarse, cada socket se une automáticamente a la sala privada `usuario:
 | --- | --- | --- | --- |
 | Servidor → Cliente | `notificacion:nueva` | `{ id, tipo, titulo, mensaje, enlace, leida, creadaEn }` | Aviso persistido, enviado a todas las sesiones abiertas del usuario. |
 
-El frontend mantiene una única conexión de notificaciones en el layout raíz (`NotificationsProvider`), independiente de la conexión del chat de una sala.
+El frontend mantiene una única conexión de notificaciones en el layout raíz (`NotificationsProvider`), independiente de la conexión de mensajería de una sala.
 
 ### Persistencia
 

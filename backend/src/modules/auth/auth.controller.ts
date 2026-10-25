@@ -126,7 +126,7 @@ export const register = async (req: Request, res: Response) => {
 export const verifyEmail = async (req: Request, res: Response) => {
   const token = text(req.params.token);
   if (!token) {
-    return res.status(400).json({ error: 'El enlace de verificación no contiene un token válido.' });
+    return res.status(400).json({ error: 'El enlace de verificación no contiene un código válido.' });
   }
 
   try {
@@ -339,7 +339,7 @@ export const resetPassword = async (req: Request, res: Response) => {
   );
 
   if (!token) {
-    return res.status(400).json({ error: 'El enlace de recuperación no contiene un token válido.' });
+    return res.status(400).json({ error: 'El enlace de recuperación no contiene un código válido.' });
   }
   if (nuevaContrasena.length < 8) {
     return res.status(400).json({ error: 'La nueva contraseña debe tener mínimo 8 caracteres.' });
