@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
 import { useRouter } from 'next/navigation';
@@ -147,13 +148,22 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!correo.endsWith('@utb.edu.co')) {
-      setError('Por favor ingrese un correo institucional válido (@utb.edu.co)');
+    setSuccessMsg('');
+
+    const correoNormalizado = correo.trim().toLowerCase();
+
+    if (!correoNormalizado.endsWith('@utb.edu.co')) {
+      setError('Por favor ingresa un correo institucional válido (@utb.edu.co).');
       return;
     }
+    if (!password) {
+      setError('Ingresa tu contraseña.');
+      return;
+    }
+
     setLoading(true);
     try {
-      await login(correo, password);
+      await login(correoNormalizado, password);
       router.push('/salas');
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');
@@ -165,23 +175,44 @@ export default function LoginPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!correo.endsWith('@utb.edu.co')) {
-      setError('El registro requiere obligatoriamente un correo @utb.edu.co');
+    setSuccessMsg('');
+
+    const correoNormalizado = correo.trim().toLowerCase();
+
+    if (!nombre.trim()) {
+      setError('Ingresa tu nombre completo.');
+      return;
+    }
+    if (!correoNormalizado.endsWith('@utb.edu.co')) {
+      setError('El registro requiere obligatoriamente un correo @utb.edu.co.');
       return;
     }
     if (password.length < 8) {
       setError('La contraseña debe tener mínimo 8 caracteres.');
       return;
     }
+
     setLoading(true);
     try {
-      await register(nombre, correo, password, carrera, semestre);
-      setSuccessMsg('¡Registro exitoso! Correo de verificación enviado. Ingresando...');
-      setTimeout(() => {
-        router.push('/salas');
-      }, 1500);
+      const res = await register({
+        nombre: nombre.trim(),
+        correo: correoNormalizado,
+        contrasena: password,
+        carrera: carrera.trim(),
+        semestre: Number(semestre),
+      });
+
+      // El registro NO inicia sesión: primero se debe verificar el correo.
+      setSuccessMsg(
+        res.message ||
+          'Cuenta creada. Revisa tu correo institucional para verificar tu cuenta.'
+      );
+      setCorreo(correoNormalizado);
+      setPassword('');
+      setShowPassword(false);
+      setActiveTab('ingresar');
     } catch (err: any) {
-      setError(err.message || 'Error en el registro');
+      setError(err.message || 'Error al registrar la cuenta');
     } finally {
       setLoading(false);
     }
@@ -235,7 +266,7 @@ export default function LoginPage() {
                   : 'border-[#0B4FC4] bg-[#F3F7FF] text-slate-400 hover:text-slate-600'
               }`}
             >
-              Registro (Demo)
+              Registro
             </button>
           </div>
 
@@ -319,16 +350,12 @@ export default function LoginPage() {
                 </button>
 
                 <div className="pt-1 text-center">
-                  <a
-                    href="#forgot"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      alert('Se ha enviado un enlace de recuperación a tu correo institucional.');
-                    }}
+                  <Link
+                    href="/recuperar"
                     className="text-[13px] font-semibold text-[#0B4FC4] hover:underline"
                   >
                     ¿Olvidaste tu contraseña?
-                  </a>
+                  </Link>
                 </div>
               </form>
             ) : (

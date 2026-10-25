@@ -110,6 +110,17 @@ URL base: `http://localhost:3001`
 
 El login rechaza las cuentas cuyo correo aún no esté verificado. Las rutas protegidas validan el JWT y los roles `ESTUDIANTE`, `TUTOR` y `ADMINISTRADOR`.
 
+### Pantallas de autenticación (frontend)
+
+| Ruta | Descripción |
+| --- | --- |
+| `/login` | Inicio de sesión y registro. Al registrarse, la cuenta queda pendiente de verificación y la pantalla vuelve a "Ingresar" con el correo escrito. |
+| `/verificar?token=...` | Verifica el correo con el enlace enviado. Si el token expiró o ya se usó, permite solicitar uno nuevo. |
+| `/recuperar` | Solicita el enlace de recuperación. Por seguridad, siempre responde con el mismo mensaje, exista o no la cuenta. |
+| `/restablecer?token=...` | Permite crear la nueva contraseña (mínimo 8 caracteres y confirmación). El token de recuperación vence en 1 hora. |
+
+El JWT se guarda en `localStorage` bajo la clave `utb_token` y la sesión se rehidrata consultando `/api/auth/me` al recargar la página.
+
 ---
 
 ## Estrategia de Ramas (Git Flow Simplificado)

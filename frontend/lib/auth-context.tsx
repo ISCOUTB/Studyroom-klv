@@ -1,81 +1,120 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { apiRequest } from './api';
 
 export interface User {
   id: string;
   nombre: string;
   correo: string;
   rol: 'ESTUDIANTE' | 'TUTOR' | 'ADMINISTRADOR';
-  token: string;
+}
+
+interface RegisterData {
+  nombre: string;
+  correo: string;
+  contrasena: string;
+  carrera: string;
+  semestre: number;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (correo: string, pass: string) => Promise<boolean>;
-  register: (nombre: string, correo: string, pass: string, carrera: string, semestre: number) => Promise<boolean>;
-  logout: () => void;
+  token: string | null;
   isLoading: boolean;
+  login: (correo: string, contrasena: string) => Promise<void>;
+  register: (datos: RegisterData) => Promise<{ message: string }>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Al abrir la aplicación, si hay un token guardado, preguntamos al backend
+  // quién es el usuario. Así la sesión sobrevive a una recarga de página.
   useEffect(() => {
-    const storedUser = localStorage.getItem('utb_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        localStorage.removeItem('utb_user');
-      }
+    const storedToken = localStorage.getItem('utb_token');
+
+    if (!storedToken) {
+      setIsLoading(false);
+      return;
     }
-    setIsLoading(false);
+
+    setToken(storedToken);
+
+    const fetchMe = async () => {
+      try {
+        const data = await apiRequest('/api/auth/me', {
+          headers: {
+            Authorization: `Bearer ${storedToken}`,
+          },
+        });
+        setUser(data.usuario);
+      } catch {
+        // Token vencido, inválido o backend apagado: se cierra la sesión local.
+        localStorage.removeItem('utb_token');
+        setToken(null);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMe();
   }, []);
 
-  const login = async (correo: string, pass: string): Promise<boolean> => {
-    if (!correo.endsWith('@utb.edu.co')) {
-      throw new Error('Solo se permite el acceso con correo institucional @utb.edu.co');
-    }
-    // Simulación temporal demo para Sprint 0/1 (se conectará a API/Supabase)
-    const mockUser: User = {
-      id: 'usr-12345',
-      nombre: correo.split('@')[0].replace('.', ' ').toUpperCase(),
-      correo,
-      rol: correo.includes('admin') ? 'ADMINISTRADOR' : correo.includes('tutor') ? 'TUTOR' : 'ESTUDIANTE',
-      token: 'mock-jwt-token-utb-2026'
-    };
-    setUser(mockUser);
-    localStorage.setItem('utb_user', JSON.stringify(mockUser));
-    return true;
+  const login = async (correo: string, contrasena: string): Promise<void> => {
+    const data = await apiRequest('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        correoUnico: correo.trim().toLowerCase(),
+        contrasena,
+      }),
+    });
+
+    localStorage.setItem('utb_token', data.token);
+    setToken(data.token);
+    setUser(data.usuario);
   };
 
-  const register = async (nombre: string, correo: string, pass: string, carrera: string, semestre: number): Promise<boolean> => {
-    if (!correo.endsWith('@utb.edu.co')) {
-      throw new Error('El registro requiere un correo institucional @utb.edu.co');
+  const register = async (datos: RegisterData): Promise<{ message: string }> => {
+    if (!datos || typeof datos !== 'object') {
+      throw new Error('Los datos del registro no son válidos.');
     }
-    const mockUser: User = {
-      id: 'usr-' + Math.random().toString(36).substring(2, 9),
-      nombre,
-      correo,
-      rol: 'ESTUDIANTE',
-      token: 'mock-jwt-token-utb-2026'
-    };
-    setUser(mockUser);
-    localStorage.setItem('utb_user', JSON.stringify(mockUser));
-    return true;
+
+    const data = await apiRequest('/api/auth/registro', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        nombre: String(datos.nombre ?? '').trim(),
+        correoUnico: String(datos.correo ?? '').trim().toLowerCase(),
+        contrasena: String(datos.contrasena ?? ''),
+        carrera: String(datos.carrera ?? '').trim(),
+        semestre: Number(datos.semestre),
+      }),
+    });
+
+    // El registro NO inicia sesión: primero hay que verificar el correo.
+    return { message: data.message };
   };
 
   const logout = () => {
+    localStorage.removeItem('utb_token');
+    setToken(null);
     setUser(null);
-    localStorage.removeItem('utb_user');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
