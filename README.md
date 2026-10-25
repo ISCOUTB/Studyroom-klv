@@ -19,11 +19,10 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ## Estructura del Stack
 
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
-- **Backend (API Gateway):** Next.js Route Handlers unificando tres servicios limpios:
-  - **Servicio de Salas** (`/api/salas`)
-  - **Servicio de Tutorías** (`/api/tutorias`)
-  - **Servicio de Recursos** (`/api/recursos`)
-- **Base de Datos & Auth:** Supabase PostgreSQL + Prisma ORM + JWT con Bcrypt.
+- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`; los servicios de Salas, Tutorías y Recursos se montarán sobre la misma API.
+- **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
+- **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con token de 24 h y recuperación de contraseña con token de 1 h.
+- **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del backend para desarrollo.
 - **Tiempo Real:** Supabase Realtime (WebSockets) para chat en vivo y sincronización < 2s.
 
 ---
@@ -45,38 +44,71 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
    ```
 
 2. **Configurar variables de entorno:**
-   Copia el archivo `.env.example` a `.env` en la raíz (y en frontend/backend si aplica) y ajusta los valores de conexión:
+   Copia `.env.example` a `.env` en la raíz (para Prisma) y a `backend/.env` (para la API):
+   ```powershell
+   Copy-Item .env.example .env
+   Copy-Item .env.example backend/.env
+   ```
+   Ajusta al menos `DATABASE_URL`, `JWT_SECRET`, `ADMIN_EMAIL` y `ADMIN_PASSWORD`. Si dejas las variables `SMTP_*` vacías, los enlaces de verificación y recuperación se imprimen en la consola del backend.
+
+3. **Instalar dependencias (raíz, frontend y backend):**
    ```bash
-   cp .env.example .env
+   npm run install:all
    ```
 
-3. **Instalar dependencias:**
+4. **Preparar la base de datos (Prisma):**
    ```bash
-   npm install
-   ```
-
-4. **Configurar la base de datos (Prisma):**
-   ```bash
-   npx prisma generate
-   npx prisma migrate dev --name init
+   npm run db:generate
+   npm run db:migrate
    npm run db:seed
    ```
+   El seed crea (o actualiza) el usuario administrador con las credenciales definidas en `backend/.env`.
 
 ---
 
 ## Ejecución
 
 ### Desarrollo
+
+Abre dos terminales en la raíz del proyecto:
+
 ```bash
-npm run dev
+# Terminal 1 - API (Express + Prisma)
+npm run dev:backend
+
+# Terminal 2 - Frontend (Next.js)
+npm run dev:frontend
 ```
-La aplicación estará disponible en `http://localhost:3000`.
+
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:3001`
+- Salud de la API: `http://localhost:3001/health`
+
+> `npm run dev` levanta únicamente el frontend.
 
 ### Producción
 ```bash
-npm run build
-npm start
+npm run build        # frontend
+cd backend && npm run build && npm start
 ```
+
+---
+
+## API de Autenticación
+
+URL base: `http://localhost:3001`
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `POST` | `/api/auth/registro` | Crea la cuenta (correo `@utb.edu.co`) y envía el enlace de verificación. |
+| `GET` | `/api/auth/verificar/:token` | Verifica el correo con el token de 24 h. |
+| `POST` | `/api/auth/reenviar-verificacion` | Genera y envía un nuevo enlace de verificación. |
+| `POST` | `/api/auth/login` | Inicia sesión si el correo está verificado. Devuelve JWT (8 h). |
+| `GET` | `/api/auth/me` | Devuelve el usuario autenticado. Requiere `Authorization: Bearer <token>`. |
+| `POST` | `/api/auth/recuperar` | Envía el enlace de recuperación (token de 1 h). |
+| `POST` | `/api/auth/restablecer` | Cambia la contraseña usando el token de recuperación. |
+
+El login rechaza las cuentas cuyo correo aún no esté verificado. Las rutas protegidas validan el JWT y los roles `ESTUDIANTE`, `TUTOR` y `ADMINISTRADOR`.
 
 ---
 

@@ -10,9 +10,9 @@
     "build": "npm run build:frontend",
     "build:frontend": "cd frontend && npm run build",
     "start": "cd frontend && npm start",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "node prisma/seed.js",
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "db:seed": "cd backend && npm run seed",
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
   },
   "keywords": [
