@@ -1,11 +1,27 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
 import { useParams, useRouter } from 'next/navigation';
-import { apiRequest } from '@/lib/api';
-import { type SalaDetalle, inicialesDe } from '@/lib/salas';
+import { io, type Socket } from 'socket.io-client';
+import { apiRequest, API_URL } from '@/lib/api';
+import {
+  type MensajeChat,
+  type PresenciaSala,
+  type SalaDetalle,
+  inicialesDe,
+} from '@/lib/salas';
+
+const MAX_MENSAJE = 500;
+
+function horaDe(iso: string): string {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return '';
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(fecha.getHours())}:${pad(fecha.getMinutes())}`;
+}
 
 export default function SalaEnVivoPage() {
   const { user, token, isLoading } = useAuth();
@@ -22,6 +38,18 @@ export default function SalaEnVivoPage() {
   const [saliendo, setSaliendo] = useState(false);
   const [cronometro, setCronometro] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+
+  // Chat en tiempo real
+  const [mensajes, setMensajes] = useState<MensajeChat[]>([]);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const [mensajeTexto, setMensajeTexto] = useState('');
+  const [enviandoMensaje, setEnviandoMensaje] = useState(false);
+  const [errorChat, setErrorChat] = useState('');
+  const [conectadoChat, setConectadoChat] = useState(false);
+  const [usuariosEnLinea, setUsuariosEnLinea] = useState<string[]>([]);
+
+  const socketRef = useRef<Socket | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const cargarSala = useCallback(async () => {
     if (!token || !salaId) return;
@@ -43,6 +71,55 @@ export default function SalaEnVivoPage() {
       setLoadingSala(false);
     }
   }, [token, salaId]);
+
+  const cargarHistorial = useCallback(async () => {
+    if (!token || !salaId) return;
+
+    setCargandoHistorial(true);
+
+    try {
+      const data = await apiRequest<{ mensajes: MensajeChat[] }>(
+        `/api/salas/${encodeURIComponent(salaId)}/mensajes`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Se combina con los mensajes que hayan llegado en vivo durante la carga.
+      setMensajes((prev) => {
+        const porId = new Map<string, MensajeChat>();
+        for (const mensaje of data.mensajes ?? []) {
+          porId.set(mensaje.id, mensaje);
+        }
+        for (const mensaje of prev) {
+          if (!porId.has(mensaje.id)) {
+            porId.set(mensaje.id, mensaje);
+          }
+        }
+
+        return Array.from(porId.values())
+          .sort(
+            (a, b) =>
+              new Date(a.enviadoEn).getTime() - new Date(b.enviadoEn).getTime()
+          )
+          .slice(-100);
+      });
+      setErrorChat('');
+    } catch (err) {
+      setErrorChat(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo cargar el historial del chat.'
+      );
+    } finally {
+      setCargandoHistorial(false);
+    }
+  }, [token, salaId]);
+
+  useEffect(() => {
+    setMensajes([]);
+    setMensajeTexto('');
+    setErrorChat('');
+    setUsuariosEnLinea([]);
+  }, [salaId]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -82,6 +159,120 @@ export default function SalaEnVivoPage() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Conexión del chat: solo para participantes activos de la sala.
+  useEffect(() => {
+    if (!token || !salaId || !sala?.participando) {
+      setConectadoChat(false);
+      return;
+    }
+
+    const socket = io(API_URL, {
+      auth: { token },
+      reconnection: true,
+    });
+    socketRef.current = socket;
+    setConectadoChat(false);
+    setErrorChat('');
+    setUsuariosEnLinea([]);
+
+    const unirseAlChat = () => {
+      socket.timeout(8000).emit(
+        'sala:unirse',
+        { salaId },
+        (timeoutError: Error | null, respuesta: { ok?: boolean; error?: string }) => {
+          if (timeoutError) {
+            setConectadoChat(false);
+            setErrorChat('El chat tardó demasiado en responder. Reintentando…');
+            return;
+          }
+          if (!respuesta?.ok) {
+            setConectadoChat(false);
+            setErrorChat(
+              respuesta?.error || 'No se pudo conectar al chat de la sala.'
+            );
+            return;
+          }
+
+          setConectadoChat(true);
+          setErrorChat('');
+          // Al conectar y al reconectar se refresca el historial.
+          void cargarHistorial();
+        }
+      );
+    };
+
+    socket.on('connect', unirseAlChat);
+    socket.on('disconnect', () => {
+      setConectadoChat(false);
+      setUsuariosEnLinea([]);
+    });
+    socket.on('connect_error', (error: Error) => {
+      setConectadoChat(false);
+      const mensaje = error?.message || '';
+      const esMensajeDelServidor = /token|usuario|sala|particip/i.test(mensaje);
+      setErrorChat(
+        esMensajeDelServidor
+          ? mensaje
+          : 'No se pudo conectar al chat. Reintentando…'
+      );
+    });
+    socket.on('mensaje:nuevo', (mensaje: MensajeChat) => {
+      setMensajes((prev) =>
+        prev.some((item) => item.id === mensaje.id) ? prev : [...prev, mensaje]
+      );
+    });
+    socket.on('presencia:actualizada', (presencia: PresenciaSala) => {
+      if (presencia?.salaId === salaId) {
+        setUsuariosEnLinea(presencia.usuarios ?? []);
+      }
+    });
+    socket.on(
+      'sala:expulsado',
+      (payload: { salaId?: string; motivo?: string }) => {
+        if (payload?.salaId !== salaId) return;
+
+        setConectadoChat(false);
+        setUsuariosEnLinea([]);
+        setErrorChat(
+          payload.motivo ||
+            'Tu participación en la sala terminó. Vuelve a unirte para usar el chat.'
+        );
+        setSala((prev) =>
+          prev
+            ? {
+                ...prev,
+                participando: false,
+                participantesActuales: Math.max(
+                  0,
+                  prev.participantesActuales - 1
+                ),
+                participantes: prev.participantes.filter(
+                  (participante) => participante.id !== user.id
+                ),
+              }
+            : prev
+        );
+      }
+    );
+
+    return () => {
+      socket.emit('sala:salir', { salaId });
+      socket.removeAllListeners();
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [token, salaId, sala?.participando, cargarHistorial]);
+
+  // Mantiene el historial desplazado hasta el último mensaje.
+  useEffect(() => {
+    if (activeTab !== 'chat') return;
+
+    const contenedor = chatScrollRef.current;
+    if (contenedor) {
+      contenedor.scrollTop = contenedor.scrollHeight;
+    }
+  }, [mensajes, activeTab, cargandoHistorial]);
 
   const formatTime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -131,6 +322,39 @@ export default function SalaEnVivoPage() {
     }
   };
 
+  const handleEnviarMensaje = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const contenido = mensajeTexto.trim();
+    const socket = socketRef.current;
+
+    if (!contenido || !socket || !salaId || !conectadoChat || enviandoMensaje) {
+      return;
+    }
+
+    setEnviandoMensaje(true);
+    setErrorChat('');
+
+    socket.timeout(8000).emit(
+      'mensaje:enviar',
+      { salaId, contenido },
+      (timeoutError: Error | null, respuesta: { ok?: boolean; error?: string }) => {
+        setEnviandoMensaje(false);
+
+        if (timeoutError) {
+          setErrorChat('El mensaje tardó demasiado en enviarse. Inténtalo de nuevo.');
+          return;
+        }
+        if (!respuesta?.ok) {
+          setErrorChat(respuesta?.error || 'No se pudo enviar el mensaje.');
+          return;
+        }
+
+        setMensajeTexto('');
+      }
+    );
+  };
+
   if (isLoading || !user) return null;
 
   if (loadingSala) {
@@ -176,6 +400,17 @@ export default function SalaEnVivoPage() {
   }
 
   const participantes = sala.participantes ?? [];
+  const puedeEscribir = sala.participando && conectadoChat;
+  const estadoConexion = !isOnline
+    ? { color: 'bg-red-500', texto: 'Sin conexión a internet' }
+    : !sala.participando
+      ? { color: 'bg-slate-500', texto: 'Chat disponible al unirte a la sala' }
+      : conectadoChat
+        ? {
+            color: 'bg-emerald-400',
+            texto: `Chat conectado · ${usuariosEnLinea.length} en línea`,
+          }
+        : { color: 'bg-amber-400', texto: 'Conectando al chat…' };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
@@ -330,31 +565,138 @@ export default function SalaEnVivoPage() {
 
           {/* Contenido de la pestaña activa */}
           {activeTab === 'chat' && (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                <div className="text-3xl mb-3">💬</div>
-                <p className="text-xs font-semibold text-slate-300">
-                  Chat en tiempo real
-                </p>
-                <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
-                  El chat de la sala se conectará en la siguiente fase del
-                  proyecto.
-                </p>
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="px-3 py-2 border-b border-slate-700/60 flex items-center justify-between text-[10px] text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      conectadoChat ? 'bg-emerald-400' : 'bg-slate-500'
+                    }`}
+                  ></span>
+                  {sala.participando
+                    ? conectadoChat
+                      ? `${usuariosEnLinea.length} en línea`
+                      : 'Conectando…'
+                    : 'Solo participantes'}
+                </span>
+                {mensajes.length > 0 && (
+                  <span>
+                    {mensajes.length} mensaje{mensajes.length === 1 ? '' : 's'}
+                  </span>
+                )}
               </div>
 
-              <form className="p-3 bg-slate-900 border-t border-slate-700 flex items-center gap-2">
+              <div
+                ref={chatScrollRef}
+                className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3"
+              >
+                {!sala.participando ? (
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    <div className="text-3xl mb-3">💬</div>
+                    <p className="text-xs font-semibold text-slate-300">
+                      Únete para participar en el chat
+                    </p>
+                    <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
+                      Solo los participantes activos de la sala pueden leer y
+                      enviar mensajes.
+                    </p>
+                  </div>
+                ) : cargandoHistorial ? (
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-blue-400" />
+                    <p className="mt-3 text-[11px] text-slate-400">
+                      Cargando mensajes…
+                    </p>
+                  </div>
+                ) : mensajes.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    <div className="text-3xl mb-3">💬</div>
+                    <p className="text-xs font-semibold text-slate-300">
+                      Aún no hay mensajes
+                    </p>
+                    <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
+                      Escribe el primer mensaje y comienza a estudiar en equipo.
+                    </p>
+                  </div>
+                ) : (
+                  mensajes.map((mensaje) => {
+                    const esMio = mensaje.usuario.id === user.id;
+
+                    return (
+                      <div
+                        key={mensaje.id}
+                        className={`flex gap-2 ${esMio ? 'flex-row-reverse' : ''}`}
+                      >
+                        <div className="w-7 h-7 shrink-0 bg-blue-600/30 text-blue-300 rounded-full flex items-center justify-center font-bold text-[10px]">
+                          {inicialesDe(mensaje.usuario.nombre)}
+                        </div>
+                        <div
+                          className={`max-w-[80%] flex flex-col ${
+                            esMio ? 'items-end' : 'items-start'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-0.5 px-0.5">
+                            <span className="text-[10px] font-semibold text-slate-300">
+                              {esMio ? 'Tú' : mensaje.usuario.nombre}
+                            </span>
+                            <span className="text-[9px] text-slate-500">
+                              {horaDe(mensaje.enviadoEn)}
+                            </span>
+                          </div>
+                          <p
+                            className={`rounded-xl px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap ${
+                              esMio
+                                ? 'bg-[#0B4FC4] text-white rounded-tr-sm'
+                                : 'bg-slate-900/70 text-slate-200 border border-slate-700/50 rounded-tl-sm'
+                            }`}
+                          >
+                            {mensaje.contenido}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {errorChat && (
+                <div
+                  role="alert"
+                  className="mx-3 mb-2 rounded-lg border border-red-700/60 bg-red-900/30 px-2.5 py-2 text-[10px] leading-relaxed text-red-200"
+                >
+                  {errorChat}
+                </div>
+              )}
+
+              <form
+                onSubmit={handleEnviarMensaje}
+                className="p-3 bg-slate-900 border-t border-slate-700 flex items-center gap-2"
+              >
                 <input
                   type="text"
-                  disabled
-                  placeholder="Chat disponible próximamente"
-                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 disabled:cursor-not-allowed"
+                  value={mensajeTexto}
+                  onChange={(e) => setMensajeTexto(e.target.value)}
+                  maxLength={MAX_MENSAJE}
+                  disabled={!puedeEscribir || enviandoMensaje}
+                  placeholder={
+                    !sala.participando
+                      ? 'Únete para escribir en el chat'
+                      : !conectadoChat
+                        ? 'Conectando al chat…'
+                        : 'Escribe un mensaje…'
+                  }
+                  aria-label="Mensaje del chat"
+                  className="flex-1 min-w-0 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <button
                   type="submit"
-                  disabled
-                  className="p-2 bg-[#0B4FC4] text-white rounded-xl text-xs font-bold opacity-50 cursor-not-allowed"
+                  disabled={
+                    !puedeEscribir || enviandoMensaje || !mensajeTexto.trim()
+                  }
+                  aria-label="Enviar mensaje"
+                  className="p-2 bg-[#0B4FC4] hover:bg-[#093fa3] text-white rounded-xl text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  ➤
+                  {enviandoMensaje ? '…' : '➤'}
                 </button>
               </form>
             </div>
@@ -375,6 +717,7 @@ export default function SalaEnVivoPage() {
               ) : (
                 participantes.map((participante) => {
                   const esYo = participante.id === user.id;
+                  const enLinea = usuariosEnLinea.includes(participante.id);
                   const rol = participante.esAnfitrion
                     ? 'Anfitrión/a'
                     : esYo
@@ -400,10 +743,20 @@ export default function SalaEnVivoPage() {
                           <p className="text-[10px] text-slate-400">{rol}</p>
                         </div>
                       </div>
-                      <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        En línea
-                      </span>
+                      {sala.participando && (
+                        <span
+                          className={`text-[10px] font-medium flex items-center gap-1 ${
+                            enLinea ? 'text-emerald-400' : 'text-slate-500'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              enLinea ? 'bg-emerald-400' : 'bg-slate-500'
+                            }`}
+                          ></span>
+                          {enLinea ? 'En línea' : 'Desconectado'}
+                        </span>
+                      )}
                     </div>
                   );
                 })
@@ -426,12 +779,8 @@ export default function SalaEnVivoPage() {
 
           {/* Footer indicador de conexión */}
           <div className="p-2 bg-slate-900 border-t border-slate-700 text-center text-[10px] text-slate-400 flex items-center justify-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isOnline ? 'bg-emerald-400' : 'bg-red-500'
-              }`}
-            ></span>
-            <span>{isOnline ? 'Conectado' : 'Sin conexión'} · datos actualizados</span>
+            <span className={`w-2 h-2 rounded-full ${estadoConexion.color}`}></span>
+            <span>{estadoConexion.texto}</span>
           </div>
         </div>
       </div>

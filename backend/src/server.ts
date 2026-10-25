@@ -1,8 +1,11 @@
 import 'dotenv/config';
+import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
+import { Server as SocketServer } from 'socket.io';
 import authRoutes from './modules/auth/auth.routes';
 import salasRoutes from './modules/salas/salas.routes';
+import { registrarChat } from './modules/salas/chat.socket';
 import { getCurrentUser } from './modules/auth/auth.controller';
 import {
   authMiddleware,
@@ -29,6 +32,14 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const httpServer = createServer(app);
+const io = new SocketServer(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+  },
+});
 
 app.use(
   cors({
@@ -86,7 +97,12 @@ app.use(
   }
 );
 
-app.listen(PORT, () => {
+// ---------------------------------------------------------
+// Chat en tiempo real (Socket.IO sobre el mismo servidor)
+// ---------------------------------------------------------
+registrarChat(io);
+
+httpServer.listen(PORT, () => {
   console.log('');
   console.log('============================================================');
   console.log('  Campus Collaborative Study - API');
@@ -103,8 +119,10 @@ app.listen(PORT, () => {
   console.log('   GET    /api/salas                   (requiere JWT)');
   console.log('   POST   /api/salas                   (requiere JWT)');
   console.log('   GET    /api/salas/:id               (requiere JWT)');
+  console.log('   GET    /api/salas/:id/mensajes      (requiere JWT)');
   console.log('   POST   /api/salas/:id/unirse        (requiere JWT)');
   console.log('   POST   /api/salas/:id/abandonar     (requiere JWT)');
+  console.log('   WS     /socket.io                   (chat con JWT)');
   console.log('   GET    /api/me                      (requiere JWT)');
   console.log('   GET    /api/admin                   (solo ADMINISTRADOR)');
   console.log('   GET    /health');
@@ -112,4 +130,5 @@ app.listen(PORT, () => {
   console.log('');
 });
 
+export { io };
 export default app;

@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
+import { esParticipanteActivo, listarMensajesSala } from './chat.service';
+import { expulsarUsuarioDeSala } from './chat.socket';
 
 const ASIGNATURAS = [
   'Cálculo I',
@@ -244,6 +246,41 @@ export const obtenerSala = async (req: AuthRequest, res: Response) => {
 };
 
 // ---------------------------------------------------------
+// GET /api/salas/:id/mensajes
+// ---------------------------------------------------------
+export const listarMensajes = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  const salaId = text(req.params.id);
+
+  try {
+    const sala = await prisma.salaEstudio.findUnique({
+      where: { id: salaId },
+      select: { id: true },
+    });
+
+    if (!sala) {
+      return res.status(404).json({ error: 'La sala de estudio no existe.' });
+    }
+
+    const participa = await esParticipanteActivo(salaId, req.user.id);
+    if (!participa) {
+      return res.status(403).json({
+        error: 'Únete a la sala para ver el historial del chat.',
+      });
+    }
+
+    const mensajes = await listarMensajesSala(salaId);
+    return res.json({ mensajes });
+  } catch (error) {
+    console.error('[salas:mensajes]', error);
+    return res.status(500).json({ error: 'No se pudo cargar el chat de la sala.' });
+  }
+};
+
+// ---------------------------------------------------------
 // POST /api/salas/:id/unirse
 // ---------------------------------------------------------
 export const unirseSala = async (req: AuthRequest, res: Response) => {
@@ -318,6 +355,9 @@ export const abandonarSala = async (req: AuthRequest, res: Response) => {
       where: { id: participacion.id },
       data: { estado: 'ABANDONO' },
     });
+
+    // Si tenía el chat abierto, se le saca del canal en tiempo real.
+    await expulsarUsuarioDeSala(salaId, req.user.id);
 
     return res.json({ message: 'Saliste de la sala de estudio.' });
   } catch (error) {

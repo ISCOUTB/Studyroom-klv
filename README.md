@@ -1,7 +1,7 @@
 # Campus Collaborative Study — Universidad Tecnológica de Bolívar (UTB)
 
 Plataforma colaborativa web (responsive desde 360px) para estudiantes de primeros semestres (Cálculo, Física, Álgebra, Estadística) que permite:
-1. **Unirse a salas de estudio simultáneo** y resolver ejercicios en conjunto con chat en tiempo real (< 2s) y control de cupo máximo (10 participantes).
+1. **Unirse a salas de estudio simultáneo** y resolver ejercicios en conjunto con chat en tiempo real (< 2s) y control de cupo configurable (2 a 50 participantes, 10 por defecto).
 2. **Agendar tutorías con estudiantes avanzados (monitores)**, seleccionando modalidad (Virtual / Presencial con ubicación en campus ej. "Bloque C · Salón 204") y bloques de disponibilidad horaria.
 
 Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206).
@@ -23,7 +23,7 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
 - **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con token de 24 h y recuperación de contraseña con token de 1 h.
 - **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del backend para desarrollo.
-- **Tiempo Real:** Supabase Realtime (WebSockets) para chat en vivo y sincronización < 2s.
+- **Tiempo Real:** Socket.IO sobre el mismo servidor HTTP de Express. El chat usa el JWT de la API, valida la participación en la sala y persiste los mensajes en PostgreSQL.
 
 ---
 
@@ -31,7 +31,7 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 
 - Node.js >= 18.x
 - npm >= 9.x o pnpm >= 8.x
-- Cuenta en Supabase o PostgreSQL local (Docker)
+- PostgreSQL local o en Supabase, con su `DATABASE_URL`
 
 ---
 
@@ -133,14 +133,40 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | `POST` | `/api/salas` | Crea una sala. El usuario autenticado queda como anfitrión y primer participante. |
 | `GET` | `/api/salas/:id` | Devuelve el detalle de una sala y sus participantes activos. |
 | `POST` | `/api/salas/:id/unirse` | Une al usuario autenticado a la sala (valida el cupo). |
-| `POST` | `/api/salas/:id/abandonar` | Marca la participación del usuario como abandonada. |
+| `POST` | `/api/salas/:id/abandonar` | Marca la participación del usuario como abandonada y lo saca del chat en tiempo real. |
+| `GET` | `/api/salas/:id/mensajes` | Devuelve los últimos 100 mensajes del chat en orden cronológico. Solo para participantes activos. |
 
 ### Pantallas de salas (frontend)
 
 | Ruta | Descripción |
 | --- | --- |
 | `/salas` | Listado real desde la API, búsqueda, filtros por asignatura/estado, creación de salas y acceso a cada sala. |
-| `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. El chat y los materiales siguen siendo marcadores de posición para la siguiente fase. |
+| `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye chat en tiempo real con historial y presencia. Los materiales siguen pendientes. |
+
+---
+
+## Chat en Tiempo Real
+
+El chat usa **Socket.IO** en `http://localhost:3001/socket.io`, sobre el mismo servidor HTTP de Express. No requiere credenciales de servicios externos.
+
+- El cliente se conecta con `auth: { token }` usando el mismo JWT de la API.
+- Solo los participantes con `ParticipacionSala.estado = ACTIVO` pueden leer el historial, unirse al canal y enviar mensajes.
+- Los mensajes se guardan en la tabla `mensajes_chat` (máximo 500 caracteres).
+- Al reconectarse, el cliente vuelve a unirse a la sala y recarga el historial.
+- Si un usuario abandona la sala, el servidor lo expulsa del canal y deja de recibir mensajes.
+
+### Eventos de Socket.IO
+
+| Dirección | Evento | Payload | Descripción |
+| --- | --- | --- | --- |
+| Cliente → Servidor | `sala:unirse` | `{ salaId }` | Valida la participación y une el socket a la sala. |
+| Cliente → Servidor | `sala:salir` | `{ salaId }` | Sale del canal y actualiza la presencia. |
+| Cliente → Servidor | `mensaje:enviar` | `{ salaId, contenido }` | Guarda y difunde el mensaje (máximo 500 caracteres). |
+| Servidor → Cliente | `mensaje:nuevo` | `{ id, contenido, enviadoEn, usuario }` | Mensaje persistido que reciben todos los participantes conectados. |
+| Servidor → Cliente | `presencia:actualizada` | `{ salaId, usuarios }` | IDs de los usuarios con el chat abierto. |
+| Servidor → Cliente | `sala:expulsado` | `{ salaId, motivo }` | El usuario dejó de ser participante activo de la sala. |
+
+Los eventos que modifican estado responden con un `ack` en formato `{ ok, error }`. La interfaz usa la petición HTTP del historial y mantiene el orden cronológico de los mensajes.
 
 ---
 

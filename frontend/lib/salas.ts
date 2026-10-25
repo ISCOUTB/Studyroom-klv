@@ -42,6 +42,24 @@ export interface SalaDetalle extends Sala {
   participantes: ParticipanteSala[];
 }
 
+export interface AutorMensaje {
+  id: string;
+  nombre: string;
+  rol: 'ESTUDIANTE' | 'TUTOR' | 'ADMINISTRADOR' | string;
+}
+
+export interface MensajeChat {
+  id: string;
+  contenido: string;
+  enviadoEn: string;
+  usuario: AutorMensaje;
+}
+
+export interface PresenciaSala {
+  salaId: string;
+  usuarios: string[];
+}
+
 // La base de datos no guarda una imagen por sala: se elige una acorde
 // a la asignatura para conservar el diseño actual de las tarjetas.
 const IMAGENES_POR_ASIGNATURA: Record<string, string> = {
