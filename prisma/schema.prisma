@@ -149,15 +149,19 @@ model Tutoria {
   solicitante     Usuario           @relation("SolicitanteTutorias", fields: [solicitanteId], references: [id])
   monitorId       String            @map("monitor_id")
   monitor         Tutor             @relation("MonitorTutorias", fields: [monitorId], references: [id])
+  disponibilidadId String?          @map("disponibilidad_id")
+  disponibilidad  DisponibilidadMonitor? @relation(fields: [disponibilidadId], references: [id], onDelete: SetNull)
   estado          EstadoTutoriaEnum @default(SOLICITADA)
   solicitadaEn    DateTime          @default(now()) @map("solicitada_en")
-  expiraEn        DateTime          @map("expira_en") // solicitadaEn + 24 horas
+  expiraEn        DateTime          @map("expira_en") // min(solicitadaEn + 24 h, inicio del bloque)
   respondidaEn    DateTime?         @map("respondida_en")
   programadaEn    DateTime?         @map("programada_en")
   modalidad       ModalidadEnum     @default(VIRTUAL)
   ubicacion       String?
   notas           String?
 
+  @@index([monitorId, programadaEn])
+  @@index([solicitanteId, estado])
   @@map("tutorias")
 }
 
@@ -169,7 +173,10 @@ model DisponibilidadMonitor {
   horaIni   String   @map("hora_ini") // formato "09:00"
   horaFin   String   @map("hora_fin") // formato "10:00"
   diaSemana String   @map("dia_semana") // Lun | Mar | Mié | Jue | Vie
+  tutorias  Tutoria[]
 
+  @@unique([tutorId, fecha, horaIni])
+  @@index([tutorId, fecha])
   @@map("disponibilidad_monitor")
 }
 

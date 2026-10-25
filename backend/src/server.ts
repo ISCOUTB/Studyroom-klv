@@ -5,11 +5,12 @@ import cors from 'cors';
 import { Server as SocketServer } from 'socket.io';
 import authRoutes from './modules/auth/auth.routes';
 import salasRoutes from './modules/salas/salas.routes';
+import tutoriasRoutes from './modules/tutorias/tutorias.routes';
+import adminRoutes from './modules/admin/admin.routes';
 import { registrarChat } from './modules/salas/chat.socket';
 import { getCurrentUser } from './modules/auth/auth.controller';
 import {
   authMiddleware,
-  rbacMiddleware,
   rateLimitMiddleware,
 } from './shared/middleware';
 
@@ -75,11 +76,14 @@ app.use('/api/salas', salasRoutes);
 app.get('/api/me', authMiddleware, getCurrentUser);
 
 // ---------------------------------------------------------
-// Ruta protegida de ejemplo: solo ADMINISTRADOR
+// Tutorías y monitores
 // ---------------------------------------------------------
-app.get('/api/admin', authMiddleware, rbacMiddleware('ADMINISTRADOR'), (_req, res) => {
-  res.json({ message: 'Acceso de administrador concedido.' });
-});
+app.use('/api/tutorias', tutoriasRoutes);
+
+// ---------------------------------------------------------
+// Administración (solo ADMINISTRADOR)
+// ---------------------------------------------------------
+app.use('/api/admin', adminRoutes);
 
 // ---------------------------------------------------------
 // 404 y manejo global de errores
@@ -126,9 +130,15 @@ httpServer.listen(PORT, () => {
   console.log('   DELETE /api/salas/:id/materiales/:materialId');
   console.log('   POST   /api/salas/:id/unirse        (requiere JWT)');
   console.log('   POST   /api/salas/:id/abandonar     (requiere JWT)');
+  console.log('   GET    /api/tutorias                (requiere JWT)');
+  console.log('   GET    /api/tutorias/monitores      (requiere JWT)');
+  console.log('   POST   /api/tutorias                (requiere JWT)');
+  console.log('   POST   /api/tutorias/solicitud-monitor');
+  console.log('   GET    /api/tutorias/disponibilidad (monitor)');
+  console.log('   POST   /api/tutorias/disponibilidad (monitor)');
+  console.log('   GET    /api/admin/monitores         (solo ADMINISTRADOR)');
   console.log('   WS     /socket.io                   (chat con JWT)');
   console.log('   GET    /api/me                      (requiere JWT)');
-  console.log('   GET    /api/admin                   (solo ADMINISTRADOR)');
   console.log('   GET    /health');
   console.log('============================================================');
   console.log('');

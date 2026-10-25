@@ -19,7 +19,7 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ## Estructura del Stack
 
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
-- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas` y los materiales de cada sala en `/api/salas/:id/materiales`; Tutorías se montarán sobre la misma API.
+- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales` y las tutorías en `/api/tutorias`, con la administración de monitores en `/api/admin/monitores`.
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
 - **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con token de 24 h y recuperación de contraseña con token de 1 h.
 - **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del backend para desarrollo.
@@ -187,6 +187,66 @@ Cada sala tiene una pestaña **Materiales** donde los participantes activos pued
 - **Descarga:** el navegador solicita el archivo con el header `Authorization` y lo guarda con su nombre original.
 
 La ruta de almacenamiento se puede cambiar con la variable opcional `UPLOADS_DIR` en `backend/.env`. Si se usa una ruta relativa, se resuelve desde la carpeta `backend`. En producción conviene respaldar esa carpeta o migrarla a un almacenamiento de objetos.
+
+---
+
+## Tutorías Académicas
+
+Los estudiantes pueden agendar acompañamiento con monitores de semestres avanzados, de forma virtual o presencial en el campus.
+
+### Flujo de una tutoría
+
+1. Un estudiante envía su **solicitud de monitor** con carrera, semestre, asignaturas, biografía y modalidad.
+2. Un **administrador** revisa la solicitud y la aprueba o la rechaza en `/admin/monitores`.
+3. Al aprobarse, el usuario pasa a tener rol `TUTOR` y puede publicar **bloques de disponibilidad** (fecha, hora de inicio y hora de fin), además de editar su perfil público.
+4. Un estudiante elige un monitor y un bloque libre, indica modalidad (Virtual / Presencial), ubicación y notas.
+5. El monitor tiene **24 horas** (o hasta el inicio del bloque, si ocurre antes) para aceptar o rechazar. Si acepta, la tutoría queda `AGENDADA` y las demás solicitudes de ese bloque se rechazan automáticamente. Si no responde, la solicitud pasa a `EXPIRADA`.
+
+### Estados de una tutoría
+
+`SOLICITADA` → `AGENDADA` → `FINALIZADA`
+
+También puede terminar en `RECHAZADA`, `EXPIRADA` o `CANCELADA`. El solicitante, el monitor o un administrador pueden cancelar una tutoría activa. Solo el monitor (o un administrador) puede finalizarla una vez llegó la hora.
+
+### Reglas de disponibilidad
+
+- Cada bloque debe estar en una fecha y hora futuras.
+- Duración mínima de 30 minutos y máxima de 4 horas.
+- No se permiten bloques superpuestos para el mismo monitor.
+- Un bloque con tutoría agendada no se puede eliminar hasta cancelarla.
+- Al eliminar un bloque con solicitudes pendientes, estas se cancelan automáticamente.
+
+### API de tutorías
+
+Todas las rutas requieren `Authorization: Bearer <token>`.
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `GET` | `/api/tutorias/contexto` | Indica si el usuario es monitor aprobado y el estado de su solicitud. |
+| `POST` | `/api/tutorias/solicitud-monitor` | Envía o actualiza una solicitud para ser monitor. |
+| `GET` | `/api/tutorias/perfil-monitor` | Devuelve el perfil público del monitor y sus bloques. |
+| `PUT` | `/api/tutorias/perfil-monitor` | Actualiza carrera, semestre, asignaturas, biografía y modalidad. |
+| `GET` | `/api/tutorias/disponibilidad` | Lista los bloques futuros del monitor autenticado. |
+| `POST` | `/api/tutorias/disponibilidad` | Publica un bloque (`fecha`, `horaIni`, `horaFin`). |
+| `DELETE` | `/api/tutorias/disponibilidad/:id` | Elimina un bloque propio. |
+| `GET` | `/api/tutorias/monitores` | Catálogo de monitores aprobados con sus bloques libres. |
+| `GET` | `/api/tutorias` | Tutorías del usuario (solicitante o monitor; el administrador ve todas). |
+| `POST` | `/api/tutorias` | Solicita una tutoría (`monitorId`, `disponibilidadId`, `modalidad`, `ubicacion`, `notas`). |
+| `PATCH` | `/api/tutorias/:id/responder` | El monitor acepta o rechaza (`{ "aceptar": true }`). |
+| `PATCH` | `/api/tutorias/:id/cancelar` | Cancela una tutoría activa. |
+| `PATCH` | `/api/tutorias/:id/finalizar` | Marca como finalizada una tutoría agendada que ya comenzó. |
+| `GET` | `/api/admin/monitores` | Lista solicitudes pendientes y monitores aprobados (solo administrador). |
+| `PATCH` | `/api/admin/monitores/:id` | Aprueba o rechaza una solicitud (`{ "aprobado": true }`). |
+
+### Pantallas de tutorías (frontend)
+
+| Ruta | Descripción |
+| --- | --- |
+| `/tutorias` | Catálogo de monitores, filtros, agendamiento y seguimiento de tutorías activas e historial. |
+| `/perfil/monitor` | Solicitud para ser monitor, edición del perfil público y gestión de bloques de disponibilidad. |
+| `/admin/monitores` | Revisión, aprobación y rechazo de solicitudes de monitor. |
+
+Los enlaces a **Tutorías** están disponibles desde la pantalla de salas. Los monitores ven el acceso a su perfil y los administradores al panel de aprobación.
 
 ---
 

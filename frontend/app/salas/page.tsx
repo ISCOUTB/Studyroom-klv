@@ -209,6 +209,13 @@ export default function SalasPage() {
               </span>
             </div>
 
+            <button
+              onClick={() => router.push('/tutorias')}
+              className="text-xs font-semibold text-[#0B4FC4] hover:underline px-2 py-2"
+            >
+              📅 <span className="hidden sm:inline">Tutorías</span>
+            </button>
+
             <button className="relative p-2 text-slate-600 hover:text-[#0B4FC4] transition-colors">
               🔔
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
@@ -226,13 +233,34 @@ export default function SalasPage() {
 
       {/* Contenido principal */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-black text-[#0B4FC4] tracking-tight mb-2">
-            Salas de estudio
-          </h1>
-          <p className="text-slate-600 text-sm">
-            Encuentra tu grupo y aprende en equipo.
-          </p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-[#0B4FC4] tracking-tight mb-2">
+              Salas de estudio
+            </h1>
+            <p className="text-slate-600 text-sm">
+              Encuentra tu grupo y aprende en equipo.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {user.rol === 'TUTOR' && (
+              <button
+                onClick={() => router.push('/perfil/monitor')}
+                className="px-4 py-2.5 bg-white border border-slate-200 hover:border-[#0B4FC4] text-[#0B4FC4] font-semibold rounded-xl text-xs transition-colors"
+              >
+                Mi perfil de monitor
+              </button>
+            )}
+            {user.rol === 'ADMINISTRADOR' && (
+              <button
+                onClick={() => router.push('/admin/monitores')}
+                className="px-4 py-2.5 bg-white border border-slate-200 hover:border-[#0B4FC4] text-[#0B4FC4] font-semibold rounded-xl text-xs transition-colors"
+              >
+                Panel de monitores
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Buscador y Filtros */}
