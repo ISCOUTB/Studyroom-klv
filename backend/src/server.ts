@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './modules/auth/auth.routes';
+import salasRoutes from './modules/salas/salas.routes';
 import { getCurrentUser } from './modules/auth/auth.controller';
 import {
   authMiddleware,
@@ -54,6 +55,11 @@ app.get('/health', (_req, res) => {
 // ---------------------------------------------------------
 app.use('/api/auth', rateLimitMiddleware, authRoutes);
 
+// ---------------------------------------------------------
+// Salas de estudio
+// ---------------------------------------------------------
+app.use('/api/salas', salasRoutes);
+
 // Alias de compatibilidad para el usuario autenticado
 app.get('/api/me', authMiddleware, getCurrentUser);
 
@@ -83,7 +89,7 @@ app.use(
 app.listen(PORT, () => {
   console.log('');
   console.log('============================================================');
-  console.log('  Campus Collaborative Study - API de autenticacion');
+  console.log('  Campus Collaborative Study - API');
   console.log(`  http://localhost:${PORT}`);
   console.log('============================================================');
   console.log('  Endpoints disponibles:');
@@ -94,6 +100,11 @@ app.listen(PORT, () => {
   console.log('   GET    /api/auth/me                 (requiere JWT)');
   console.log('   POST   /api/auth/recuperar');
   console.log('   POST   /api/auth/restablecer');
+  console.log('   GET    /api/salas                   (requiere JWT)');
+  console.log('   POST   /api/salas                   (requiere JWT)');
+  console.log('   GET    /api/salas/:id               (requiere JWT)');
+  console.log('   POST   /api/salas/:id/unirse        (requiere JWT)');
+  console.log('   POST   /api/salas/:id/abandonar     (requiere JWT)');
   console.log('   GET    /api/me                      (requiere JWT)');
   console.log('   GET    /api/admin                   (solo ADMINISTRADOR)');
   console.log('   GET    /health');

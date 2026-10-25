@@ -1,0 +1,327 @@
+import { Request, Response } from 'express';
+import prisma from '../../config/prisma';
+import { AuthRequest } from '../../shared/middleware/auth.middleware';
+
+const ASIGNATURAS = [
+  'Cálculo I',
+  'Física I',
+  'Álgebra Lineal',
+  'Estadística',
+  'Cálculo Integral',
+];
+
+const ESTADOS_CREACION: Record<string, 'ACTIVA' | 'PROGRAMADA'> = {
+  activa: 'ACTIVA',
+  programada: 'PROGRAMADA',
+};
+
+const ESTADOS_VISIBLES: Array<'ACTIVA' | 'PROGRAMADA'> = ['ACTIVA', 'PROGRAMADA'];
+const ETIQUETA_ESTADO: Record<string, string> = {
+  ACTIVA: 'Activa',
+  PROGRAMADA: 'Programada',
+  FINALIZADA: 'Finalizada',
+};
+
+function text(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function estadoParaCrear(value: unknown): 'ACTIVA' | 'PROGRAMADA' | null {
+  return ESTADOS_CREACION[text(value).toLowerCase()] ?? null;
+}
+
+type UsuarioResumen = {
+  id: string;
+  nombre: string;
+  rol: string;
+};
+
+type ParticipacionSala = {
+  usuarioId: string;
+  estado: string;
+  unioEn: Date;
+  usuario?: UsuarioResumen;
+};
+
+type SalaConRelaciones = {
+  id: string;
+  anfitrionId: string;
+  titulo: string;
+  asignatura: string;
+  tema: string;
+  descripcion: string;
+  cupoMaximo: number;
+  privacidad: string;
+  estado: string;
+  creadoEn: Date;
+  anfitrion: UsuarioResumen;
+  participantes?: ParticipacionSala[];
+};
+
+function serializarSala(sala: SalaConRelaciones, usuarioId: string, detalle = false) {
+  const participantesActivos = (sala.participantes ?? []).filter(
+    (participacion) => participacion.estado === 'ACTIVO'
+  );
+
+  const respuesta: Record<string, unknown> = {
+    id: sala.id,
+    titulo: sala.titulo,
+    asignatura: sala.asignatura,
+    tema: sala.tema,
+    descripcion: sala.descripcion,
+    anfitrion: {
+      id: sala.anfitrion.id,
+      nombre: sala.anfitrion.nombre,
+    },
+    participantesActuales: participantesActivos.length,
+    cupoMaximo: sala.cupoMaximo,
+    estado: ETIQUETA_ESTADO[sala.estado] ?? 'Activa',
+    privacidad: sala.privacidad === 'PRIVADA' ? 'Privada' : 'Pública',
+    creadoEn: sala.creadoEn,
+    esAnfitrion: sala.anfitrionId === usuarioId,
+    participando: participantesActivos.some(
+      (participacion) => participacion.usuarioId === usuarioId
+    ),
+  };
+
+  if (detalle) {
+    respuesta.participantes = participantesActivos.map((participacion) => ({
+      id: participacion.usuario?.id ?? participacion.usuarioId,
+      nombre: participacion.usuario?.nombre ?? 'Usuario UTB',
+      rol: participacion.usuario?.rol ?? 'ESTUDIANTE',
+      esAnfitrion: participacion.usuarioId === sala.anfitrionId,
+      unioEn: participacion.unioEn,
+    }));
+  }
+
+  return respuesta;
+}
+
+// ---------------------------------------------------------
+// GET /api/salas
+// ---------------------------------------------------------
+export const listarSalas = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  try {
+    const salas = await prisma.salaEstudio.findMany({
+      where: { estado: { in: ESTADOS_VISIBLES } },
+      orderBy: [{ estado: 'asc' }, { creadoEn: 'desc' }],
+      include: {
+        anfitrion: { select: { id: true, nombre: true, rol: true } },
+        participantes: {
+          where: { estado: 'ACTIVO' },
+          select: { usuarioId: true, estado: true, unioEn: true },
+        },
+      },
+    });
+
+    return res.json({
+      salas: salas.map((sala) => serializarSala(sala, req.user!.id)),
+    });
+  } catch (error) {
+    console.error('[salas:listar]', error);
+    return res.status(500).json({ error: 'No se pudieron cargar las salas de estudio.' });
+  }
+};
+
+// ---------------------------------------------------------
+// POST /api/salas
+// ---------------------------------------------------------
+export const crearSala = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  const titulo = text(req.body?.titulo);
+  const asignatura = text(req.body?.asignatura);
+  const tema = text(req.body?.tema);
+  const descripcion = text(req.body?.descripcion);
+  const estado = estadoParaCrear(req.body?.estado ?? 'Activa');
+  const cupoMaximo = Number(req.body?.cupoMaximo ?? 10);
+
+  if (titulo.length < 3 || titulo.length > 100) {
+    return res.status(400).json({
+      error: 'El título debe tener entre 3 y 100 caracteres.',
+    });
+  }
+  if (!ASIGNATURAS.includes(asignatura)) {
+    return res.status(400).json({
+      error: 'Selecciona una asignatura válida.',
+    });
+  }
+  if (tema.length < 3 || tema.length > 140) {
+    return res.status(400).json({
+      error: 'El tema debe tener entre 3 y 140 caracteres.',
+    });
+  }
+  if (descripcion.length < 5 || descripcion.length > 600) {
+    return res.status(400).json({
+      error: 'La descripción debe tener entre 5 y 600 caracteres.',
+    });
+  }
+  if (!estado) {
+    return res.status(400).json({
+      error: 'El estado debe ser Activa o Programada.',
+    });
+  }
+  if (!Number.isInteger(cupoMaximo) || cupoMaximo < 2 || cupoMaximo > 50) {
+    return res.status(400).json({
+      error: 'El cupo máximo debe estar entre 2 y 50 participantes.',
+    });
+  }
+
+  try {
+    const sala = await prisma.salaEstudio.create({
+      data: {
+        anfitrionId: req.user.id,
+        titulo,
+        asignatura,
+        tema,
+        descripcion,
+        cupoMaximo,
+        estado,
+        // El anfitrión cuenta como primer participante de la sala.
+        participantes: {
+          create: { usuarioId: req.user.id },
+        },
+      },
+      include: {
+        anfitrion: { select: { id: true, nombre: true, rol: true } },
+        participantes: {
+          where: { estado: 'ACTIVO' },
+          select: { usuarioId: true, estado: true, unioEn: true },
+        },
+      },
+    });
+
+    return res.status(201).json({
+      message: 'Sala de estudio creada con éxito.',
+      sala: serializarSala(sala, req.user.id),
+    });
+  } catch (error) {
+    console.error('[salas:crear]', error);
+    return res.status(500).json({ error: 'No se pudo crear la sala de estudio.' });
+  }
+};
+
+// ---------------------------------------------------------
+// GET /api/salas/:id
+// ---------------------------------------------------------
+export const obtenerSala = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  const id = text(req.params.id);
+
+  try {
+    const sala = await prisma.salaEstudio.findUnique({
+      where: { id },
+      include: {
+        anfitrion: { select: { id: true, nombre: true, rol: true } },
+        participantes: {
+          where: { estado: 'ACTIVO' },
+          orderBy: { unioEn: 'asc' },
+          include: {
+            usuario: { select: { id: true, nombre: true, rol: true } },
+          },
+        },
+      },
+    });
+
+    if (!sala) {
+      return res.status(404).json({ error: 'La sala de estudio no existe.' });
+    }
+
+    return res.json({ sala: serializarSala(sala, req.user.id, true) });
+  } catch (error) {
+    console.error('[salas:detalle]', error);
+    return res.status(500).json({ error: 'No se pudo cargar la sala de estudio.' });
+  }
+};
+
+// ---------------------------------------------------------
+// POST /api/salas/:id/unirse
+// ---------------------------------------------------------
+export const unirseSala = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  const salaId = text(req.params.id);
+
+  try {
+    const sala = await prisma.salaEstudio.findUnique({
+      where: { id: salaId },
+      select: { id: true, estado: true, cupoMaximo: true },
+    });
+
+    if (!sala) {
+      return res.status(404).json({ error: 'La sala de estudio no existe.' });
+    }
+    if (sala.estado === 'FINALIZADA') {
+      return res.status(400).json({ error: 'Esta sala ya finalizó.' });
+    }
+
+    const participacion = await prisma.participacionSala.findUnique({
+      where: { salaId_usuarioId: { salaId, usuarioId: req.user.id } },
+    });
+
+    if (participacion?.estado === 'ACTIVO') {
+      return res.json({ message: 'Ya estabas dentro de la sala.' });
+    }
+
+    const participantesActivos = await prisma.participacionSala.count({
+      where: { salaId, estado: 'ACTIVO' },
+    });
+
+    if (participantesActivos >= sala.cupoMaximo) {
+      return res.status(409).json({ error: 'La sala está llena.' });
+    }
+
+    await prisma.participacionSala.upsert({
+      where: { salaId_usuarioId: { salaId, usuarioId: req.user.id } },
+      update: { estado: 'ACTIVO', unioEn: new Date() },
+      create: { salaId, usuarioId: req.user.id },
+    });
+
+    return res.json({ message: 'Te uniste a la sala de estudio.' });
+  } catch (error) {
+    console.error('[salas:unirse]', error);
+    return res.status(500).json({ error: 'No se pudo unir a la sala de estudio.' });
+  }
+};
+
+// ---------------------------------------------------------
+// POST /api/salas/:id/abandonar
+// ---------------------------------------------------------
+export const abandonarSala = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  const salaId = text(req.params.id);
+
+  try {
+    const participacion = await prisma.participacionSala.findUnique({
+      where: { salaId_usuarioId: { salaId, usuarioId: req.user.id } },
+    });
+
+    if (!participacion) {
+      return res.json({ message: 'No estabas dentro de la sala.' });
+    }
+
+    await prisma.participacionSala.update({
+      where: { id: participacion.id },
+      data: { estado: 'ABANDONO' },
+    });
+
+    return res.json({ message: 'Saliste de la sala de estudio.' });
+  } catch (error) {
+    console.error('[salas:abandonar]', error);
+    return res.status(500).json({ error: 'No se pudo salir de la sala de estudio.' });
+  }
+};

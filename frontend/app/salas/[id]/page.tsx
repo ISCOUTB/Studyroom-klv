@@ -1,53 +1,77 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
 import { useParams, useRouter } from 'next/navigation';
-
-interface Mensaje {
-  id: string;
-  autor: string;
-  iniciales: string;
-  tiempo: string;
-  texto: string;
-}
-
-const MOCK_MENSAJES_INICIALES: Mensaje[] = [
-  { id: '1', autor: 'Camila Torres', iniciales: 'CT', tiempo: '10:41', texto: '¿Cómo resolvemos el límite?' },
-  { id: '2', autor: 'Andrés Pérez', iniciales: 'AP', tiempo: '10:42', texto: 'Revisemos juntos la expresión en la pizarra.' },
-  { id: '3', autor: 'Laura Méndez', iniciales: 'LM', tiempo: '10:43', texto: '¡Perfecto! Ahora tiene más sentido.' },
-  { id: '4', autor: 'María López', iniciales: 'ML', tiempo: '10:44', texto: 'Sí, la asíntota horizontal es y = 2.' },
-];
+import { apiRequest } from '@/lib/api';
+import { type SalaDetalle, inicialesDe } from '@/lib/salas';
 
 export default function SalaEnVivoPage() {
-  const { user } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
-  const salaId = params?.id || 'sala-1';
+  const salaId = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
   const [activeTab, setActiveTab] = useState<'chat' | 'participantes' | 'materiales'>('chat');
-  const [mensajes, setMensajes] = useState<Mensaje[]>(MOCK_MENSAJES_INICIALES);
-  const [nuevoMensaje, setNuevoMensaje] = useState('');
-  const [cronometro, setCronometro] = useState(2562); // 42:42 en segundos
+  const [sala, setSala] = useState<SalaDetalle | null>(null);
+  const [loadingSala, setLoadingSala] = useState(true);
+  const [errorSala, setErrorSala] = useState('');
+  const [errorAccion, setErrorAccion] = useState('');
+  const [uniendose, setUniendose] = useState(false);
+  const [saliendo, setSaliendo] = useState(false);
+  const [cronometro, setCronometro] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!user) {
-      router.push('/login');
+  const cargarSala = useCallback(async () => {
+    if (!token || !salaId) return;
+
+    setLoadingSala(true);
+    setErrorSala('');
+
+    try {
+      const data = await apiRequest<{ sala: SalaDetalle }>(
+        `/api/salas/${encodeURIComponent(salaId)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSala(data.sala);
+    } catch (err) {
+      setErrorSala(
+        err instanceof Error ? err.message : 'No se pudo cargar la sala de estudio.'
+      );
+    } finally {
+      setLoadingSala(false);
     }
-  }, [user, router]);
+  }, [token, salaId]);
 
-  // Cronómetro de sala
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCronometro((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    if (isLoading) return;
 
-  // Simulación de reconexión y sincronización < 2s
+    if (!user || !token) {
+      router.push('/login');
+      return;
+    }
+
+    cargarSala();
+  }, [isLoading, user, token, router, cargarSala]);
+
+  // Cronómetro real desde que la sala fue creada.
+  useEffect(() => {
+    if (!sala) return;
+
+    const base =
+      sala.estado === 'Activa'
+        ? Math.max(
+            0,
+            Math.floor((Date.now() - new Date(sala.creadoEn).getTime()) / 1000)
+          )
+        : 0;
+
+    setCronometro(base);
+    const timer = setInterval(() => setCronometro((prev) => prev + 1), 1000);
+    return () => clearInterval(timer);
+  }, [sala]);
+
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -60,35 +84,98 @@ export default function SalaEnVivoPage() {
   }, []);
 
   const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
     const s = secs % 60;
     const pad = (n: number) => (n < 10 ? '0' + n : n);
-    return `${pad(Math.floor(m / 60) > 0 ? Math.floor(m / 60) : 0)}:${pad(m % 60)}:${pad(s)}`;
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
   };
 
-  const handleEnviarMensaje = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nuevoMensaje.trim()) return;
+  const handleUnirse = async () => {
+    if (!token || !sala) return;
 
-    const now = new Date();
-    const tiempoStr = `${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
-
-    const msg: Mensaje = {
-      id: String(Date.now()),
-      autor: user?.nombre || 'Tú',
-      iniciales: (user?.nombre || 'T U').split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase(),
-      tiempo: tiempoStr,
-      texto: nuevoMensaje,
-    };
-
-    setMensajes((prev) => [...prev, msg]);
-    setNuevoMensaje('');
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    setErrorAccion('');
+    setUniendose(true);
+    try {
+      await apiRequest(`/api/salas/${sala.id}/unirse`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await cargarSala();
+    } catch (err) {
+      setErrorAccion(
+        err instanceof Error ? err.message : 'No se pudo entrar a la sala.'
+      );
+    } finally {
+      setUniendose(false);
+    }
   };
 
-  if (!user) return null;
+  const handleAbandonar = async () => {
+    if (!token || !sala) return;
+
+    setErrorAccion('');
+    setSaliendo(true);
+    try {
+      await apiRequest(`/api/salas/${sala.id}/abandonar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      router.push('/salas');
+    } catch (err) {
+      setErrorAccion(
+        err instanceof Error ? err.message : 'No se pudo salir de la sala.'
+      );
+    } finally {
+      setSaliendo(false);
+    }
+  };
+
+  if (isLoading || !user) return null;
+
+  if (loadingSala) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center px-4">
+        <UTBLogo className="h-10 mb-8" />
+        <div className="h-12 w-12 animate-spin rounded-full border-[3px] border-slate-600 border-t-blue-500" />
+        <p className="mt-4 text-sm font-semibold text-slate-300">
+          Cargando sala de estudio…
+        </p>
+      </div>
+    );
+  }
+
+  if (errorSala || !sala) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-800 p-8 text-center">
+          <div className="text-4xl mb-3">⚠️</div>
+          <h1 className="text-lg font-bold text-white mb-2">
+            No pudimos abrir la sala
+          </h1>
+          <p className="text-sm text-slate-400 mb-6">
+            {errorSala || 'La sala de estudio no existe.'}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={cargarSala}
+              className="px-4 py-2.5 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-bold rounded-xl text-xs transition-colors"
+            >
+              Reintentar
+            </button>
+            <button
+              onClick={() => router.push('/salas')}
+              className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-xl text-xs transition-colors"
+            >
+              Volver a las salas
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const participantes = sala.participantes ?? [];
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
@@ -99,8 +186,10 @@ export default function SalaEnVivoPage() {
           <div className="hidden md:flex items-center gap-3 border-l border-slate-700 pl-6">
             <span className="p-2 bg-slate-700 text-blue-400 rounded-lg">📖</span>
             <div>
-              <h2 className="font-bold text-sm text-white">Cálculo I · Límites al infinito</h2>
-              <p className="text-[11px] text-slate-400">Campus Collaborative Study</p>
+              <h2 className="font-bold text-sm text-white">
+                {sala.asignatura} · {sala.titulo}
+              </h2>
+              <p className="text-[11px] text-slate-400">{sala.tema}</p>
             </div>
           </div>
         </div>
@@ -111,15 +200,33 @@ export default function SalaEnVivoPage() {
             <span className="text-emerald-400 font-bold">{formatTime(cronometro)}</span>
           </div>
 
-          <button
-            onClick={() => router.push('/salas')}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2 shadow-sm"
-          >
-            <span>➔</span>
-            <span>Abandonar Sala</span>
-          </button>
+          {sala.participando ? (
+            <button
+              onClick={handleAbandonar}
+              disabled={saliendo}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <span>➔</span>
+              <span>{saliendo ? 'Saliendo…' : 'Abandonar Sala'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleUnirse}
+              disabled={uniendose}
+              className="px-4 py-2 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <span>+</span>
+              <span>{uniendose ? 'Entrando…' : 'Unirse a la Sala'}</span>
+            </button>
+          )}
         </div>
       </header>
+
+      {errorAccion && (
+        <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-2.5 text-center text-xs text-red-200">
+          {errorAccion}
+        </div>
+      )}
 
       {/* Contenido de la Sala */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -127,10 +234,24 @@ export default function SalaEnVivoPage() {
         <div className="flex-1 p-4 lg:p-6 flex flex-col gap-4 overflow-y-auto">
           <div className="flex items-center justify-between bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-xs">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="font-semibold text-slate-200">Videollamada y Pizarra Activas</span>
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  sala.estado === 'Activa'
+                    ? 'bg-emerald-500 animate-pulse'
+                    : 'bg-blue-400'
+                }`}
+              ></span>
+              <span className="font-semibold text-slate-200">
+                {sala.estado === 'Activa'
+                  ? 'Videollamada y Pizarra Activas'
+                  : 'Sala programada'}
+              </span>
             </div>
-            <span className="text-slate-400">4 participantes conectados</span>
+            <span className="text-slate-400">
+              {sala.participantesActuales} participante
+              {sala.participantesActuales === 1 ? '' : 's'} conectado
+              {sala.participantesActuales === 1 ? '' : 's'}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-[350px]">
@@ -142,9 +263,12 @@ export default function SalaEnVivoPage() {
               <div className="w-20 h-20 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center text-3xl font-bold mb-3 border border-blue-500/30">
                 👥
               </div>
-              <h3 className="font-bold text-sm text-slate-200">Sala de Estudio Simultáneo</h3>
+              <h3 className="font-bold text-sm text-slate-200">
+                Sala de Estudio Simultáneo
+              </h3>
               <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                La transmisión de video y audio en tiempo real se habilitará con el servicio de terceros integrado.
+                La transmisión de video y audio en tiempo real se habilitará con
+                el servicio de terceros integrado.
               </p>
             </div>
 
@@ -156,9 +280,12 @@ export default function SalaEnVivoPage() {
               <div className="w-20 h-20 bg-emerald-600/20 text-emerald-400 rounded-full flex items-center justify-center text-3xl font-bold mb-3 border border-emerald-500/30">
                 📐
               </div>
-              <h3 className="font-bold text-sm text-slate-200">Espacio de Ejercicios en Conjunto</h3>
+              <h3 className="font-bold text-sm text-slate-200">
+                Espacio de Ejercicios en Conjunto
+              </h3>
               <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                Resolución simultánea de fórmulas y gráficas matemáticas sincronizadas en tiempo real.
+                Resolución simultánea de fórmulas y gráficas matemáticas
+                sincronizadas en tiempo real.
               </p>
             </div>
           </div>
@@ -171,7 +298,9 @@ export default function SalaEnVivoPage() {
               <button
                 onClick={() => setActiveTab('chat')}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'chat' ? 'bg-[#0B4FC4] text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'chat'
+                    ? 'bg-[#0B4FC4] text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 Chat
@@ -179,18 +308,22 @@ export default function SalaEnVivoPage() {
               <button
                 onClick={() => setActiveTab('participantes')}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'participantes' ? 'bg-[#0B4FC4] text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'participantes'
+                    ? 'bg-[#0B4FC4] text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Participantes (4)
+                Participantes ({sala.participantesActuales})
               </button>
               <button
                 onClick={() => setActiveTab('materiales')}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'materiales' ? 'bg-[#0B4FC4] text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                  activeTab === 'materiales'
+                    ? 'bg-[#0B4FC4] text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Materiales (2)
+                Materiales
               </button>
             </div>
           </div>
@@ -198,47 +331,28 @@ export default function SalaEnVivoPage() {
           {/* Contenido de la pestaña activa */}
           {activeTab === 'chat' && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                {mensajes.map((m) => {
-                  const isMe = m.autor === user.nombre;
-                  return (
-                    <div key={m.id} className={`flex items-start gap-2.5 ${isMe ? 'flex-row-reverse' : ''}`}>
-                      <div className="w-7 h-7 bg-[#0B4FC4] text-white rounded-full flex items-center justify-center font-bold text-[10px] shrink-0">
-                        {m.iniciales}
-                      </div>
-                      <div className={`max-w-[75%] ${isMe ? 'text-right' : ''}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[11px] font-bold text-slate-300">{m.autor}</span>
-                          <span className="text-[10px] text-slate-500">{m.tiempo}</span>
-                        </div>
-                        <div
-                          className={`p-3 rounded-2xl text-xs leading-relaxed ${
-                            isMe
-                              ? 'bg-[#0B4FC4] text-white rounded-tr-xs'
-                              : 'bg-slate-700 text-slate-200 rounded-tl-xs'
-                          }`}
-                        >
-                          {m.texto}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                <div className="text-3xl mb-3">💬</div>
+                <p className="text-xs font-semibold text-slate-300">
+                  Chat en tiempo real
+                </p>
+                <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
+                  El chat de la sala se conectará en la siguiente fase del
+                  proyecto.
+                </p>
               </div>
 
-              {/* Formulario de chat */}
-              <form onSubmit={handleEnviarMensaje} className="p-3 bg-slate-900 border-t border-slate-700 flex items-center gap-2">
+              <form className="p-3 bg-slate-900 border-t border-slate-700 flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="Escribe un mensaje..."
-                  value={nuevoMensaje}
-                  onChange={(e) => setNuevoMensaje(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]"
+                  disabled
+                  placeholder="Chat disponible próximamente"
+                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 disabled:cursor-not-allowed"
                 />
                 <button
                   type="submit"
-                  className="p-2 bg-[#0B4FC4] hover:bg-[#093fa3] text-white rounded-xl text-xs font-bold transition-colors"
+                  disabled
+                  className="p-2 bg-[#0B4FC4] text-white rounded-xl text-xs font-bold opacity-50 cursor-not-allowed"
                 >
                   ➤
                 </button>
@@ -248,57 +362,76 @@ export default function SalaEnVivoPage() {
 
           {activeTab === 'participantes' && (
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
-              {[
-                { nombre: 'Camila Torres', rol: 'Anfitriona', estado: 'En línea' },
-                { nombre: 'Andrés Pérez', rol: 'Estudiante', estado: 'En línea' },
-                { nombre: 'Laura Méndez', rol: 'Estudiante', estado: 'En línea' },
-                { nombre: user.nombre, rol: 'Tú', estado: 'En línea' },
-              ].map((p, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-900/50 rounded-xl border border-slate-700/50">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 bg-blue-600/30 text-blue-400 rounded-full flex items-center justify-center font-bold text-xs">
-                      {p.nombre.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-200">{p.nombre}</h4>
-                      <p className="text-[10px] text-slate-400">{p.rol}</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    {p.estado}
-                  </span>
+              {participantes.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center text-center">
+                  <div className="text-3xl mb-2">👥</div>
+                  <p className="text-xs font-semibold text-slate-300">
+                    Todavía no hay participantes
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Sé la primera persona en unirte a esta sala.
+                  </p>
                 </div>
-              ))}
+              ) : (
+                participantes.map((participante) => {
+                  const esYo = participante.id === user.id;
+                  const rol = participante.esAnfitrion
+                    ? 'Anfitrión/a'
+                    : esYo
+                      ? 'Tú'
+                      : participante.rol === 'TUTOR'
+                        ? 'Monitor'
+                        : 'Estudiante';
+
+                  return (
+                    <div
+                      key={participante.id}
+                      className="flex items-center justify-between p-2.5 bg-slate-900/50 rounded-xl border border-slate-700/50"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-blue-600/30 text-blue-400 rounded-full flex items-center justify-center font-bold text-xs">
+                          {inicialesDe(participante.nombre)}
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-200">
+                            {participante.nombre}
+                            {esYo ? ' (Tú)' : ''}
+                          </h4>
+                          <p className="text-[10px] text-slate-400">{rol}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        En línea
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
 
           {activeTab === 'materiales' && (
-            <div className="flex-1 p-4 overflow-y-auto space-y-3">
-              {[
-                { nombre: 'Guía de límites.pdf', tamaño: '2.4 MB', tipo: 'PDF' },
-                { nombre: 'Ejercicios resueltos_corte2.pdf', tamaño: '1.1 MB', tipo: 'PDF' },
-              ].map((m, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-700/50">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">📄</span>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-200">{m.nombre}</h4>
-                      <p className="text-[10px] text-slate-400">{m.tipo} · {m.tamaño}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => alert(`Descargando ${m.nombre}...`)} className="text-xs text-blue-400 hover:underline font-bold">
-                    Descargar
-                  </button>
-                </div>
-              ))}
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+              <div className="text-3xl mb-3">📄</div>
+              <p className="text-xs font-semibold text-slate-300">
+                Aún no hay materiales
+              </p>
+              <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
+                La carga y descarga de archivos se habilitará en una fase
+                posterior.
+              </p>
             </div>
           )}
 
-          {/* Footer indicador sincronización */}
+          {/* Footer indicador de conexión */}
           <div className="p-2 bg-slate-900 border-t border-slate-700 text-center text-[10px] text-slate-400 flex items-center justify-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-500'}`}></span>
-            <span>Historial guardado · sincronización &lt; 2 s</span>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isOnline ? 'bg-emerald-400' : 'bg-red-500'
+              }`}
+            ></span>
+            <span>{isOnline ? 'Conectado' : 'Sin conexión'} · datos actualizados</span>
           </div>
         </div>
       </div>

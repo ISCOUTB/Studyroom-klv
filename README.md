@@ -19,7 +19,7 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ## Estructura del Stack
 
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
-- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`; los servicios de Salas, Tutorías y Recursos se montarán sobre la misma API.
+- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth` y las salas de estudio en `/api/salas`; Tutorías y Recursos se montarán sobre la misma API.
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
 - **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con token de 24 h y recuperación de contraseña con token de 1 h.
 - **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del backend para desarrollo.
@@ -120,6 +120,27 @@ El login rechaza las cuentas cuyo correo aún no esté verificado. Las rutas pro
 | `/restablecer?token=...` | Permite crear la nueva contraseña (mínimo 8 caracteres y confirmación). El token de recuperación vence en 1 hora. |
 
 El JWT se guarda en `localStorage` bajo la clave `utb_token` y la sesión se rehidrata consultando `/api/auth/me` al recargar la página.
+
+---
+
+## API de Salas de Estudio
+
+Todas las rutas requieren `Authorization: Bearer <token>`.
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `GET` | `/api/salas` | Lista las salas activas y programadas con su anfitrión y número de participantes. |
+| `POST` | `/api/salas` | Crea una sala. El usuario autenticado queda como anfitrión y primer participante. |
+| `GET` | `/api/salas/:id` | Devuelve el detalle de una sala y sus participantes activos. |
+| `POST` | `/api/salas/:id/unirse` | Une al usuario autenticado a la sala (valida el cupo). |
+| `POST` | `/api/salas/:id/abandonar` | Marca la participación del usuario como abandonada. |
+
+### Pantallas de salas (frontend)
+
+| Ruta | Descripción |
+| --- | --- |
+| `/salas` | Listado real desde la API, búsqueda, filtros por asignatura/estado, creación de salas y acceso a cada sala. |
+| `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. El chat y los materiales siguen siendo marcadores de posición para la siguiente fase. |
 
 ---
 
