@@ -274,11 +274,12 @@ Cada cambio relevante del ciclo de tutorías y de las postulaciones de monitor g
 | `TUTORIA_CANCELADA` | La otra parte | Se cancela la tutoría o el monitor elimina un bloque con solicitudes pendientes. |
 | `TUTORIA_FINALIZADA` | Estudiante | El monitor finaliza una tutoría agendada. |
 | `TUTORIA_EXPIRADA` | Estudiante | Pasan 24 h (o llega la hora del bloque) sin respuesta del monitor. |
+| `TUTORIA_RECORDATORIO` | Estudiante y monitor | La tutoría agendada comienza dentro de la ventana de recordatorio. |
 | `SOLICITUD_MONITOR` | Administradores | Un estudiante envía o actualiza su postulación de monitor. |
 | `MONITOR_APROBADO` | Solicitante | Un administrador aprueba su postulación. |
 | `MONITOR_RECHAZADO` | Solicitante | Un administrador rechaza su postulación. |
 
-La expiración se ejecuta al consultar o responder tutorías y usa un `updateMany` condicionado por estado para **no duplicar avisos** si dos procesos coinciden. La creación de notificaciones es *best-effort*: si falla el aviso, la acción principal (agendar, aceptar, cancelar, etc.) no se interrumpe.
+La expiración corre en cada ciclo del scheduler y también al consultar o responder tutorías. Usa un `updateMany` condicionado por estado para **no duplicar avisos** si dos procesos coinciden. La creación de notificaciones es *best-effort*: si falla el aviso, la acción principal (agendar, aceptar, cancelar, etc.) no se interrumpe.
 
 ### API de notificaciones
 
@@ -306,6 +307,33 @@ El frontend mantiene una única conexión de notificaciones en el layout raíz (
 - Campos: `id`, `usuario_id`, `tipo`, `titulo` (120), `mensaje` (300), `enlace` (200), `leida` y `creada_en`.
 - Índice `(usuario_id, leida, creada_en)` para el contador y el listado.
 - Migración: `prisma/migrations/20261025150000_notificaciones`.
+
+---
+
+## Scheduler y Recordatorios
+
+El backend inicia un ciclo de mantenimiento **en proceso** al arrancar (`backend/src/modules/tutorias/tutorias.scheduler.ts`). No requiere un servicio externo ni una dependencia adicional.
+
+### Qué hace cada ciclo
+
+1. **Expira solicitudes vencidas** aunque ningún usuario consulte la API. Las marca como `EXPIRADA` y avisa al estudiante.
+2. **Envía recordatorios** de las tutorías `AGENDADA` que comienzan dentro de la ventana configurada (60 minutos por defecto). Genera el aviso `TUTORIA_RECORDATORIO` en la campanita y envía un correo al estudiante y al monitor.
+
+El campo `recordatorio_enviado_en` se reclama con un `updateMany` condicionado por estado y por ese mismo campo: si hay varias instancias del backend, **solo una envía** el recordatorio. Un ciclo nunca se solapa con el anterior y las tutorías canceladas, rechazadas, expiradas o finalizadas quedan excluidas.
+
+Si SMTP no está configurado, el correo se imprime en la consola del backend en modo desarrollo, igual que los enlaces de verificación y recuperación. Un fallo al enviar el correo no afecta la tutoría ni el aviso en la app.
+
+### Configuración
+
+| Variable | Valor por defecto | Descripción |
+| --- | --- | --- |
+| `SCHEDULER_ENABLED` | `true` | Permite desactivar el ciclo con `false`. |
+| `SCHEDULER_INTERVAL_MS` | `60000` | Cada cuánto corre el ciclo, en milisegundos. |
+| `RECORDATORIO_MINUTOS` | `60` | Minutos de anticipación del recordatorio (mínimo 5). |
+
+### Migración
+
+`prisma/migrations/20261025170000_scheduler_recordatorios` agrega el tipo `TUTORIA_RECORDATORIO`, la columna `recordatorio_enviado_en` en `tutorias` y su índice de búsqueda.
 
 ---
 

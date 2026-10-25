@@ -9,6 +9,7 @@ import tutoriasRoutes from './modules/tutorias/tutorias.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import notificacionesRoutes from './modules/notificaciones/notificaciones.routes';
 import { registrarChat } from './modules/salas/chat.socket';
+import { iniciarSchedulerTutorias } from './modules/tutorias/tutorias.scheduler';
 import { getCurrentUser } from './modules/auth/auth.controller';
 import {
   authMiddleware,
@@ -111,6 +112,11 @@ app.use(
 // Chat en tiempo real (Socket.IO sobre el mismo servidor)
 // ---------------------------------------------------------
 registrarChat(io);
+
+// ---------------------------------------------------------
+// Mantenimiento periódico de tutorías (expiración y recordatorios)
+// ---------------------------------------------------------
+iniciarSchedulerTutorias();
 
 httpServer.listen(PORT, () => {
   console.log('');

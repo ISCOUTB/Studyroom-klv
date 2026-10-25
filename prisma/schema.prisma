@@ -55,6 +55,7 @@ enum TipoNotificacionEnum {
   TUTORIA_CANCELADA
   TUTORIA_FINALIZADA
   TUTORIA_EXPIRADA
+  TUTORIA_RECORDATORIO
   MONITOR_APROBADO
   MONITOR_RECHAZADO
   SOLICITUD_MONITOR
@@ -169,12 +170,14 @@ model Tutoria {
   expiraEn        DateTime          @map("expira_en") // min(solicitadaEn + 24 h, inicio del bloque)
   respondidaEn    DateTime?         @map("respondida_en")
   programadaEn    DateTime?         @map("programada_en")
+  recordatorioEnviadoEn DateTime?   @map("recordatorio_enviado_en")
   modalidad       ModalidadEnum     @default(VIRTUAL)
   ubicacion       String?
   notas           String?
 
   @@index([monitorId, programadaEn])
   @@index([solicitanteId, estado])
+  @@index([estado, recordatorioEnviadoEn, programadaEn])
   @@map("tutorias")
 }
 
