@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
 import { useRouter } from 'next/navigation';
@@ -43,8 +43,14 @@ export default function PerfilMonitorPage() {
     setFechaBloque('');
   };
 
+  // Redirección en cliente (no durante el render) para permitir el prerender.
+  useEffect(() => {
+    if (!user) {
+      router.push('/login');
+    }
+  }, [user, router]);
+
   if (!user) {
-    router.push('/login');
     return null;
   }
 
