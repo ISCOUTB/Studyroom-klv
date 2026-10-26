@@ -8,6 +8,29 @@ export interface User {
   nombre: string;
   correo: string;
   rol: 'ESTUDIANTE' | 'TUTOR' | 'ADMINISTRADOR';
+  apellido?: string | null;
+  ciudad?: string | null;
+  pais?: string;
+  zonaHoraria?: string;
+  visibilidadCorreo?: 'CURSO' | 'OCULTO';
+  fotoUrl?: string | null;
+  emailVerificado?: boolean;
+  creadoEn?: string;
+  estudiante?: {
+    carrera: string;
+    semestre: number;
+    fotoUrl: string | null;
+  } | null;
+  tutor?: {
+    carrera: string;
+    semestre: number;
+    fotoUrl: string | null;
+    biografia: string | null;
+    modalidad: 'VIRTUAL' | 'PRESENCIAL';
+    ubicacion: string | null;
+    asignaturas: string[];
+    aprobado: boolean;
+  } | null;
 }
 
 interface RegisterData {
@@ -24,6 +47,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (correo: string, contrasena: string) => Promise<void>;
   register: (datos: RegisterData) => Promise<{ message: string }>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
 }
 
@@ -107,6 +131,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { message: data.message };
   };
 
+  const refreshUser = async (): Promise<void> => {
+    const storedToken = token ?? localStorage.getItem('utb_token');
+    if (!storedToken) return;
+
+    const data = await apiRequest('/api/auth/me', {
+      headers: {
+        Authorization: `Bearer ${storedToken}`,
+      },
+    });
+    setUser(data.usuario);
+  };
+
   const logout = () => {
     localStorage.removeItem('utb_token');
     setToken(null);
@@ -114,7 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, register, refreshUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

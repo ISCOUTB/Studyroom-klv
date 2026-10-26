@@ -259,10 +259,16 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       select: {
         id: true,
         nombre: true,
+        apellido: true,
         correoUnico: true,
         rol: true,
         emailVerificado: true,
         creadoEn: true,
+        ciudad: true,
+        pais: true,
+        zonaHoraria: true,
+        visibilidadCorreo: true,
+        fotoUrl: true,
         estudiante: {
           select: { carrera: true, semestre: true, fotoUrl: true },
         },
@@ -290,6 +296,102 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[auth:me]', error);
     return res.status(500).json({ error: 'No se pudo obtener la información del usuario.' });
+  }
+};
+
+// ---------------------------------------------------------
+// PATCH /api/auth/perfil
+// ---------------------------------------------------------
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  const nombre = text(req.body?.nombre);
+  const apellido = text(req.body?.apellido);
+  const ciudad = text(req.body?.ciudad);
+  const pais = text(req.body?.pais) || 'Colombia';
+  const zonaHoraria = text(req.body?.zonaHoraria) || 'America/Bogota';
+  const visibilidadCorreo =
+    text(req.body?.visibilidadCorreo).toUpperCase() || 'CURSO';
+  const carrera = text(req.body?.carrera);
+  const semestre = Number(req.body?.semestre);
+
+  if (!nombre) {
+    return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  }
+  if (nombre.length > 80) {
+    return res
+      .status(400)
+      .json({ error: 'El nombre no puede superar los 80 caracteres.' });
+  }
+  if (apellido.length > 80) {
+    return res
+      .status(400)
+      .json({ error: 'Los apellidos no pueden superar los 80 caracteres.' });
+  }
+  if (ciudad.length > 80) {
+    return res
+      .status(400)
+      .json({ error: 'La ciudad no puede superar los 80 caracteres.' });
+  }
+  if (pais.length > 80 || zonaHoraria.length > 60) {
+    return res
+      .status(400)
+      .json({ error: 'El país o la zona horaria no son válidos.' });
+  }
+  if (!['CURSO', 'OCULTO'].includes(visibilidadCorreo)) {
+    return res
+      .status(400)
+      .json({ error: 'La visibilidad del correo no es válida.' });
+  }
+  if (carrera.length > 80) {
+    return res
+      .status(400)
+      .json({ error: 'La carrera no puede superar los 80 caracteres.' });
+  }
+  if (carrera && (!Number.isInteger(semestre) || semestre < 1 || semestre > 12)) {
+    return res
+      .status(400)
+      .json({ error: 'El semestre debe ser un número entre 1 y 12.' });
+  }
+
+  // "nombre" conserva el nombre completo para el resto de la aplicación;
+  // "apellido" guarda solo los apellidos para poder separarlos al editar.
+  const nombreCompleto = `${nombre} ${apellido}`.trim();
+
+  try {
+    const actual = await prisma.usuario.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, estudiante: { select: { id: true } } },
+    });
+
+    if (!actual) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    await prisma.usuario.update({
+      where: { id: actual.id },
+      data: {
+        nombre: nombreCompleto,
+        apellido: apellido || null,
+        ciudad: ciudad || null,
+        pais,
+        zonaHoraria,
+        visibilidadCorreo,
+        ...(actual.estudiante && carrera
+          ? { estudiante: { update: { carrera, semestre } } }
+          : {}),
+      },
+    });
+
+    // Devolvemos el mismo formato que GET /api/auth/me.
+    return getCurrentUser(req, res);
+  } catch (error) {
+    console.error('[auth:perfil]', error);
+    return res
+      .status(500)
+      .json({ error: 'No se pudo actualizar tu perfil. Inténtalo de nuevo.' });
   }
 };
 

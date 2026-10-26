@@ -5,17 +5,12 @@ import path from 'path';
 import multer, { MulterError } from 'multer';
 import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
+import { UPLOADS_DIR } from '../../shared/uploads';
 import { esParticipanteActivo } from '../salas/chat.service';
 
 // Los archivos se guardan fuera de la carpeta pública: solo se entregan
 // mediante la ruta de descarga, que exige JWT y participación activa.
-// Las rutas relativas de UPLOADS_DIR se resuelven desde la carpeta backend.
-const RAIZ_BACKEND = path.resolve(__dirname, '../../..');
-export const UPLOADS_DIR = process.env.UPLOADS_DIR
-  ? path.isAbsolute(process.env.UPLOADS_DIR)
-    ? process.env.UPLOADS_DIR
-    : path.resolve(RAIZ_BACKEND, process.env.UPLOADS_DIR)
-  : path.join(RAIZ_BACKEND, 'uploads');
+export { UPLOADS_DIR };
 
 const MAX_ARCHIVO_BYTES = 10 * 1024 * 1024;
 const MAX_DESCRIPCION = 300;
