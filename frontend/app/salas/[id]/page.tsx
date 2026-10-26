@@ -5,6 +5,12 @@ import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Pizarra } from '@/components/sala/Pizarra';
+import {
+  AudioRemotos,
+  VideoStream,
+  Videollamada,
+  useVideollamada,
+} from '@/components/sala/Videollamada';
 import { useParams, useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
 import { apiRequest, API_URL } from '@/lib/api';
@@ -114,6 +120,15 @@ export default function SalaEnVivoPage() {
   const socketRef = useRef<Socket | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const materialInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Videollamada WebRTC: una sola instancia para toda la sala.
+  const video = useVideollamada({
+    socket: socketPizarra,
+    salaId: salaId ?? '',
+    participando: !!sala?.participando,
+    usuarioId: user?.id ?? '',
+    usuarioNombre: user?.nombre ?? '',
+  });
 
   const cargarSala = useCallback(async () => {
     if (!token || !salaId) return;
@@ -704,26 +719,46 @@ export default function SalaEnVivoPage() {
   ) => {
     const esYo = participante.id === user.id;
     const enLinea = usuariosEnLinea.includes(participante.id);
+    const remoto = video.remotos[participante.id];
+    const stream = esYo ? video.localStream : remoto?.stream ?? null;
+    const estado = esYo ? video.estadoLocal : remoto?.estado ?? null;
+    const conVideo =
+      !!stream &&
+      !!estado &&
+      (estado.camara || estado.pantalla) &&
+      stream.getVideoTracks().length > 0;
 
     return (
       <div
         key={participante.id}
-        className={`relative overflow-hidden rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 ring-1 ${
+        className={`relative overflow-hidden rounded-xl ring-1 ${
           enLinea ? 'ring-emerald-400/50' : 'ring-slate-200'
         }`}
       >
         <div
-          className={`flex items-center justify-center ${
+          className={`relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 ${
             compacto ? 'aspect-[4/3]' : 'aspect-video'
           }`}
         >
-          <div
-            className={`flex items-center justify-center rounded-full bg-white/10 font-bold text-white ${
-              compacto ? 'h-11 w-11 text-xs' : 'h-16 w-16 text-lg'
-            }`}
-          >
-            {inicialesDe(participante.nombre)}
-          </div>
+          {stream && (
+            <VideoStream
+              stream={stream}
+              espejo={esYo && !video.compartiendo}
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity ${
+                conVideo ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          )}
+
+          {!conVideo && (
+            <div
+              className={`flex items-center justify-center rounded-full bg-white/10 font-bold text-white ${
+                compacto ? 'h-11 w-11 text-xs' : 'h-16 w-16 text-lg'
+              }`}
+            >
+              {inicialesDe(participante.nombre)}
+            </div>
+          )}
         </div>
 
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-slate-950/90 to-transparent px-2 py-1.5">
@@ -731,8 +766,11 @@ export default function SalaEnVivoPage() {
             {esYo ? 'Tú' : participante.nombre}
             {participante.esAnfitrion && !esYo ? ' · Anfitrión' : ''}
           </span>
-          <span className="shrink-0 text-[10px] text-slate-300" title="Micrófono apagado">
-            🔇
+          <span
+            className="shrink-0 text-[10px] text-slate-300"
+            title={estado?.microfono ? 'Micrófono activo' : 'Micrófono apagado'}
+          >
+            {estado?.pantalla ? '🖥' : estado?.microfono ? '🎤' : '🔇'}
           </span>
         </div>
 
@@ -747,6 +785,7 @@ export default function SalaEnVivoPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 lg:h-screen lg:overflow-hidden">
+      <AudioRemotos remotos={video.remotos} />
       {/* Encabezado */}
       <header className="z-20 shrink-0 border-b border-slate-200 bg-white">
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-3 px-3 py-3 sm:px-5">
@@ -828,6 +867,17 @@ export default function SalaEnVivoPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {video.enLlamada && vista !== 'video' && (
+              <button
+                type="button"
+                onClick={() => setVista('video')}
+                title="Volver a la videollamada"
+                className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                En llamada
+              </button>
+            )}
             <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-500">
               <span className={`h-2 w-2 rounded-full ${estadoSala.color}`} />
               {estadoSala.texto}
@@ -844,7 +894,11 @@ export default function SalaEnVivoPage() {
         <div className="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row">
           {/* Columna de participantes / videollamada */}
           {vista !== 'pizarra' && (
-            <aside className="flex w-full shrink-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm xl:w-60">
+            <aside
+              className={`${
+                vista === 'video' ? 'hidden xl:flex' : 'flex'
+              } w-full shrink-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm xl:w-60`}
+            >
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold text-slate-700">
                   {vista === 'video' ? 'En la videollamada' : 'En la sala'}
@@ -882,57 +936,123 @@ export default function SalaEnVivoPage() {
                 </button>
               )}
 
-              <p className="mt-auto rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] leading-relaxed text-slate-400">
-                🎥 La transmisión de audio, video y pantalla compartida se
-                habilitará en la siguiente fase.
-              </p>
+              {video.enLlamada ? (
+                <div className="mt-auto rounded-xl border border-emerald-100 bg-emerald-50/60 px-2.5 py-2">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                      En llamada · {Object.keys(video.remotos).length + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVista('video')}
+                      className="text-[10px] font-bold text-[#0B4FC4] hover:underline"
+                    >
+                      Ver
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void video.alternarMicrofono()}
+                      aria-label={
+                        video.estadoLocal.microfono
+                          ? 'Silenciar micrófono'
+                          : 'Activar micrófono'
+                      }
+                      title={
+                        video.estadoLocal.microfono
+                          ? 'Silenciar micrófono'
+                          : 'Activar micrófono'
+                      }
+                      className={`flex h-7 items-center justify-center rounded-lg text-xs ${
+                        video.estadoLocal.microfono
+                          ? 'bg-white text-[#0B4FC4]'
+                          : 'bg-white/70 text-slate-400'
+                      }`}
+                    >
+                      {video.estadoLocal.microfono ? '🎤' : '🔇'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void video.alternarCamara()}
+                      aria-label={
+                        video.estadoLocal.camara
+                          ? 'Apagar cámara'
+                          : 'Activar cámara'
+                      }
+                      title={
+                        video.estadoLocal.camara
+                          ? 'Apagar cámara'
+                          : 'Activar cámara'
+                      }
+                      className={`flex h-7 items-center justify-center rounded-lg text-xs ${
+                        video.estadoLocal.camara
+                          ? 'bg-white text-[#0B4FC4]'
+                          : 'bg-white/70 text-slate-400'
+                      }`}
+                    >
+                      {video.estadoLocal.camara ? '🎥' : '📷'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void video.alternarPantalla()}
+                      aria-label={
+                        video.compartiendo
+                          ? 'Dejar de compartir pantalla'
+                          : 'Compartir pantalla'
+                      }
+                      title={
+                        video.compartiendo
+                          ? 'Dejar de compartir pantalla'
+                          : 'Compartir pantalla'
+                      }
+                      className={`flex h-7 items-center justify-center rounded-lg text-xs ${
+                        video.compartiendo
+                          ? 'bg-white text-[#0B4FC4]'
+                          : 'bg-white/70 text-slate-400'
+                      }`}
+                    >
+                      🖥
+                    </button>
+                    <button
+                      type="button"
+                      onClick={video.salir}
+                      aria-label="Salir de la llamada"
+                      title="Salir de la llamada"
+                      className="flex h-7 items-center justify-center rounded-lg bg-red-50 text-xs text-red-600 hover:bg-red-100"
+                    >
+                      ☎
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setVista('video')}
+                  className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#0B4FC4]"
+                >
+                  <span aria-hidden="true">🎥</span>
+                  Abrir videollamada
+                </button>
+              )}
             </aside>
           )}
 
           {/* Zona central: pizarra o videollamada */}
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             {vista === 'video' ? (
-              <section className="flex min-h-[340px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-800">
-                      Videollamada de la sala
-                    </h2>
-                    <p className="text-[11px] text-slate-400">
-                      {usuariosEnLinea.length} conectado
-                      {usuariosEnLinea.length === 1 ? '' : 's'} ahora
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">
-                    Vista previa
-                  </span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-4">
-                  {participantes.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                      {participantes.map((participante) =>
-                        tileParticipante(participante, false)
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex h-full min-h-[220px] flex-col items-center justify-center text-center">
-                      <div className="mb-3 text-3xl">👥</div>
-                      <p className="text-xs font-semibold text-slate-600">
-                        Todavía no hay participantes
-                      </p>
-                      <p className="mt-1 max-w-[240px] text-[11px] leading-relaxed text-slate-400">
-                        Únete a la sala para ver aquí a las personas conectadas.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 text-[11px] leading-relaxed text-slate-500">
-                  La transmisión de audio y video entre participantes llega en
-                  la siguiente fase. La pizarra y el chat ya están sincronizados.
-                </div>
-              </section>
+              <Videollamada
+                video={video}
+                usuarioId={user.id}
+                participantes={participantes.map((participante) => ({
+                  id: participante.id,
+                  nombre: participante.nombre,
+                  esAnfitrion: participante.esAnfitrion,
+                }))}
+                usuariosEnLinea={usuariosEnLinea}
+                puedeParticipar={sala.participando && conectadoChat}
+              />
             ) : (
               <div className="flex min-h-[460px] flex-1 flex-col xl:min-h-0">
                 <Pizarra
