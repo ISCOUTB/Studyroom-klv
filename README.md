@@ -9,9 +9,9 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ---
 
 ## Equipo de Desarrollo
-- **Luis Alfredo Rodríguez** — Desarrollo / Gestión del repositorio
-- **Kevin Acuña** — Desarrollo
-- **Valery Aurela** — Desarrollo
+- **Luis Alfredo Rodríguez** — Desarrollo / Diseño Visual
+- **Kevin Acuña** — Desarrollo / Diseño Visual / Gestión del repositorio 
+- **Valery Aurela** — Desarrollo / Flujo de Trabajo
 - **Docente:** Aisner José Marrugo Juliao
 
 ---
