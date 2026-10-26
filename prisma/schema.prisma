@@ -84,6 +84,7 @@ model Usuario {
   materiales        MaterialEstudio[]
   tutoriasSolicitadas Tutoria[]    @relation("SolicitanteTutorias")
   notificaciones    Notificacion[]
+  trazosPizarra     TrazoPizarra[]
 
   @@map("usuarios")
 }
@@ -140,6 +141,7 @@ model SalaEstudio {
   participantes ParticipacionSala[]
   mensajes      MensajeChat[]
   materiales    MaterialEstudio[]
+  trazosPizarra TrazoPizarra[]
 
   @@map("salas_estudio")
 }
@@ -223,6 +225,22 @@ model MaterialEstudio {
 
   @@index([salaId, creadoEn])
   @@map("materiales_estudio")
+}
+
+model TrazoPizarra {
+  id        String      @id @default(uuid())
+  salaId    String      @map("sala_id")
+  sala      SalaEstudio @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  usuarioId String      @map("usuario_id")
+  usuario   Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo      String      // trazo | texto
+  color     String
+  grosor    Int
+  datos     Json        // { puntos: [{x,y}], texto?, x?, y? } en coordenadas 0..1
+  creadoEn  DateTime    @default(now()) @map("creado_en")
+
+  @@index([salaId, creadoEn])
+  @@map("pizarra_trazos")
 }
 
 model Notificacion {

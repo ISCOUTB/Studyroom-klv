@@ -4,6 +4,20 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { UTBLogo } from '@/components/layout/UTBLogo';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { Pizarra } from '@/components/sala/Pizarra';
+import {
+  AudioRemotos,
+  VideoStream,
+  Videollamada,
+  useVideollamada,
+} from '@/components/sala/Videollamada';
+import {
+  IconoColumnas,
+  IconoPizarra,
+  IconoReloj,
+  IconoSalir,
+  IconoVideo,
+} from '@/components/sala/iconos-sala';
 import { useParams, useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
 import { apiRequest, API_URL } from '@/lib/api';
@@ -45,25 +59,25 @@ function iconoDeMaterial(nombre: string): { emoji: string; clase: string } {
   const extension = extensionDe(nombre);
 
   if (extension === '.pdf') {
-    return { emoji: '📕', clase: 'bg-red-500/15 text-red-300' };
+    return { emoji: '📕', clase: 'bg-red-50 text-red-600' };
   }
   if (extension === '.doc' || extension === '.docx') {
-    return { emoji: '📘', clase: 'bg-blue-500/15 text-blue-300' };
+    return { emoji: '📘', clase: 'bg-blue-50 text-blue-600' };
   }
   if (extension === '.ppt' || extension === '.pptx') {
-    return { emoji: '📊', clase: 'bg-orange-500/15 text-orange-300' };
+    return { emoji: '📊', clase: 'bg-orange-50 text-orange-600' };
   }
   if (extension === '.xls' || extension === '.xlsx') {
-    return { emoji: '📈', clase: 'bg-emerald-500/15 text-emerald-300' };
+    return { emoji: '📈', clase: 'bg-emerald-50 text-emerald-600' };
   }
   if (['.png', '.jpg', '.jpeg', '.webp'].includes(extension)) {
-    return { emoji: '🖼️', clase: 'bg-purple-500/15 text-purple-300' };
+    return { emoji: '🖼️', clase: 'bg-purple-50 text-purple-600' };
   }
   if (extension === '.txt') {
-    return { emoji: '📝', clase: 'bg-slate-500/20 text-slate-300' };
+    return { emoji: '📝', clase: 'bg-slate-100 text-slate-600' };
   }
 
-  return { emoji: '📎', clase: 'bg-slate-500/20 text-slate-300' };
+  return { emoji: '📎', clase: 'bg-slate-100 text-slate-600' };
 }
 
 export default function SalaEnVivoPage() {
@@ -73,6 +87,8 @@ export default function SalaEnVivoPage() {
   const salaId = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
   const [activeTab, setActiveTab] = useState<'chat' | 'participantes' | 'materiales'>('chat');
+  const [vista, setVista] = useState<'dividida' | 'video' | 'pizarra'>('dividida');
+  const [socketPizarra, setSocketPizarra] = useState<Socket | null>(null);
   const [sala, setSala] = useState<SalaDetalle | null>(null);
   const [loadingSala, setLoadingSala] = useState(true);
   const [errorSala, setErrorSala] = useState('');
@@ -111,6 +127,15 @@ export default function SalaEnVivoPage() {
   const socketRef = useRef<Socket | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const materialInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Videollamada WebRTC: una sola instancia para toda la sala.
+  const video = useVideollamada({
+    socket: socketPizarra,
+    salaId: salaId ?? '',
+    participando: !!sala?.participando,
+    usuarioId: user?.id ?? '',
+    usuarioNombre: user?.nombre ?? '',
+  });
 
   const cargarSala = useCallback(async () => {
     if (!token || !salaId) return;
@@ -212,9 +237,9 @@ export default function SalaEnVivoPage() {
   }, [salaId]);
 
   useEffect(() => {
-    if (activeTab !== 'materiales' || !sala?.participando) return;
+    if (!sala?.participando) return;
     void cargarMateriales();
-  }, [activeTab, sala?.participando, cargarMateriales]);
+  }, [sala?.participando, cargarMateriales]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -259,6 +284,7 @@ export default function SalaEnVivoPage() {
   useEffect(() => {
     if (!token || !salaId || !sala?.participando) {
       setConectadoChat(false);
+      setSocketPizarra(null);
       return;
     }
 
@@ -267,6 +293,7 @@ export default function SalaEnVivoPage() {
       reconnection: true,
     });
     socketRef.current = socket;
+    setSocketPizarra(socket);
     setConectadoChat(false);
     setErrorChat('');
     setUsuariosEnLinea([]);
@@ -356,6 +383,7 @@ export default function SalaEnVivoPage() {
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
+      setSocketPizarra(null);
     };
   }, [token, salaId, sala?.participando, cargarHistorial]);
 
@@ -609,10 +637,10 @@ export default function SalaEnVivoPage() {
 
   if (loadingSala) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center px-4">
-        <UTBLogo className="h-10 mb-8" />
-        <div className="h-12 w-12 animate-spin rounded-full border-[3px] border-slate-600 border-t-blue-500" />
-        <p className="mt-4 text-sm font-semibold text-slate-300">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4">
+        <UTBLogo className="mb-8 h-10" />
+        <div className="h-12 w-12 animate-spin rounded-full border-[3px] border-slate-200 border-t-[#0B4FC4]" />
+        <p className="mt-4 text-sm font-semibold text-slate-500">
           Cargando sala de estudio…
         </p>
       </div>
@@ -621,25 +649,25 @@ export default function SalaEnVivoPage() {
 
   if (errorSala || !sala) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-800 p-8 text-center">
-          <div className="text-4xl mb-3">⚠️</div>
-          <h1 className="text-lg font-bold text-white mb-2">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mb-3 text-4xl">⚠️</div>
+          <h1 className="mb-2 text-lg font-bold text-slate-900">
             No pudimos abrir la sala
           </h1>
-          <p className="text-sm text-slate-400 mb-6">
+          <p className="mb-6 text-sm text-slate-500">
             {errorSala || 'La sala de estudio no existe.'}
           </p>
           <div className="flex flex-col gap-3">
             <button
               onClick={cargarSala}
-              className="px-4 py-2.5 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-bold rounded-xl text-xs transition-colors"
+              className="rounded-xl bg-[#0B4FC4] px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#093fa3]"
             >
               Reintentar
             </button>
             <button
               onClick={() => router.push('/salas')}
-              className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-xl text-xs transition-colors"
+              className="rounded-xl bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200"
             >
               Volver a las salas
             </button>
@@ -655,655 +683,938 @@ export default function SalaEnVivoPage() {
     ? { color: 'bg-red-500', texto: 'Sin conexión a internet' }
     : !sala.participando
       ? {
-          color: 'bg-slate-500',
-          texto: 'Mensajería disponible al unirte a la sala',
+          color: 'bg-slate-400',
+          texto: 'Únete a la sala para usar el chat y la pizarra',
         }
       : conectadoChat
         ? {
-            color: 'bg-emerald-400',
-            texto: `Mensajería conectada · ${usuariosEnLinea.length} en línea`,
+            color: 'bg-emerald-500',
+            texto: `Conectado · ${usuariosEnLinea.length} en línea`,
           }
-        : { color: 'bg-amber-400', texto: 'Conectando a la mensajería…' };
+        : { color: 'bg-amber-400', texto: 'Conectando a la sala…' };
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
-      {/* Encabezado Sala en Vivo (Referencia visual 5) */}
-      <header className="bg-slate-800 border-b border-slate-700 h-20 px-6 flex items-center justify-between z-20">
-        <div className="flex items-center gap-6">
-          <UTBLogo className="h-9" />
-          <div className="hidden md:flex items-center gap-3 border-l border-slate-700 pl-6">
-            <span className="p-2 bg-slate-700 text-blue-400 rounded-lg">📖</span>
-            <div>
-              <h2 className="font-bold text-sm text-white">
-                {sala.asignatura} · {sala.titulo}
-              </h2>
-              <p className="text-[11px] text-slate-400">{sala.tema}</p>
+  const vistas: Array<{
+    id: 'dividida' | 'video' | 'pizarra';
+    etiqueta: string;
+    icono: React.ReactNode;
+  }> = [
+    { id: 'dividida', etiqueta: 'Vista dividida', icono: <IconoColumnas /> },
+    { id: 'video', etiqueta: 'Videollamada', icono: <IconoVideo /> },
+    { id: 'pizarra', etiqueta: 'Pizarra', icono: <IconoPizarra /> },
+  ];
+
+  const pestañas: Array<{
+    id: 'chat' | 'participantes' | 'materiales';
+    etiqueta: string;
+    contador: number;
+  }> = [
+    { id: 'chat', etiqueta: 'Chat', contador: mensajes.length },
+    { id: 'participantes', etiqueta: 'Participantes', contador: participantes.length },
+    { id: 'materiales', etiqueta: 'Materiales', contador: materiales.length },
+  ];
+
+  const estadoSala =
+    sala.estado === 'Activa'
+      ? { color: 'bg-emerald-500', texto: 'Sala activa' }
+      : sala.estado === 'Finalizada'
+        ? { color: 'bg-slate-400', texto: 'Sala finalizada' }
+        : { color: 'bg-blue-500', texto: 'Sala programada' };
+
+  const tileParticipante = (
+    participante: (typeof participantes)[number],
+    compacto: boolean
+  ) => {
+    const esYo = participante.id === user.id;
+    const enLinea = usuariosEnLinea.includes(participante.id);
+    const remoto = video.remotos[participante.id];
+    const stream = esYo ? video.localStream : remoto?.stream ?? null;
+    const estado = esYo ? video.estadoLocal : remoto?.estado ?? null;
+    const conVideo =
+      !!stream &&
+      !!estado &&
+      (estado.camara || estado.pantalla) &&
+      stream.getVideoTracks().length > 0;
+
+    return (
+      <div
+        key={participante.id}
+        className={`relative overflow-hidden rounded-xl ring-1 ${
+          enLinea ? 'ring-emerald-400/50' : 'ring-slate-200'
+        }`}
+      >
+        <div
+          className={`relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 ${
+            compacto ? 'aspect-[4/3]' : 'aspect-video'
+          }`}
+        >
+          {stream && (
+            <VideoStream
+              stream={stream}
+              espejo={esYo && !video.compartiendo}
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity ${
+                conVideo ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          )}
+
+          {!conVideo && (
+            <div
+              className={`flex items-center justify-center rounded-full bg-white/10 font-bold text-white ${
+                compacto ? 'h-11 w-11 text-xs' : 'h-16 w-16 text-lg'
+              }`}
+            >
+              {inicialesDe(participante.nombre)}
             </div>
-          </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-6">
-          <div className="hidden sm:flex items-center gap-2 bg-slate-700/50 px-4 py-2 rounded-xl border border-slate-700 text-xs font-mono">
-            <span>⏱️</span>
-            <span className="text-emerald-400 font-bold">{formatTime(cronometro)}</span>
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-slate-950/90 to-transparent px-2 py-1.5">
+          <span className="truncate text-[10px] font-semibold text-white">
+            {esYo ? 'Tú' : participante.nombre}
+            {participante.esAnfitrion && !esYo ? ' · Anfitrión' : ''}
+          </span>
+          <span
+            className="shrink-0 text-[10px] text-slate-300"
+            title={estado?.microfono ? 'Micrófono activo' : 'Micrófono apagado'}
+          >
+            {estado?.pantalla ? '🖥' : estado?.microfono ? '🎤' : '🔇'}
+          </span>
+        </div>
+
+        <span
+          className={`absolute right-2 top-2 h-1.5 w-1.5 rounded-full ${
+            enLinea ? 'bg-emerald-400' : 'bg-slate-500'
+          }`}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 lg:h-screen lg:overflow-hidden">
+      <AudioRemotos remotos={video.remotos} />
+      {/* Encabezado */}
+      <header className="z-20 shrink-0 border-b border-slate-200 bg-white">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-3 px-3 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+            <UTBLogo className="h-8 shrink-0" />
+            <div className="hidden h-9 w-px bg-slate-200 md:block" />
+            <div className="hidden min-w-0 md:block">
+              <h1 className="truncate text-sm font-bold text-slate-900">
+                {sala.asignatura} · {sala.titulo}
+              </h1>
+              <p className="truncate text-[11px] text-slate-400">{sala.tema}</p>
+            </div>
           </div>
 
-          <NotificationBell variant="dark" />
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-600 sm:px-3">
+              <IconoReloj className="h-4 w-4" />
+              <span className="tabular-nums">{formatTime(cronometro)}</span>
+            </div>
 
-          {sala.participando ? (
-            <button
-              onClick={handleAbandonar}
-              disabled={saliendo}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              <span>➔</span>
-              <span>{saliendo ? 'Saliendo…' : 'Abandonar Sala'}</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleUnirse}
-              disabled={uniendose}
-              className="px-4 py-2 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              <span>+</span>
-              <span>{uniendose ? 'Entrando…' : 'Unirse a la Sala'}</span>
-            </button>
-          )}
+            <NotificationBell variant="light" />
+
+            {sala.participando ? (
+              <button
+                onClick={handleAbandonar}
+                disabled={saliendo}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
+              >
+                <IconoSalir className="h-4 w-4" />
+                <span>{saliendo ? 'Saliendo…' : 'Abandonar Sala'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleUnirse}
+                disabled={uniendose}
+                className="flex items-center gap-2 rounded-xl bg-[#0B4FC4] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
+              >
+                <span aria-hidden="true">+</span>
+                <span>{uniendose ? 'Entrando…' : 'Unirse a la Sala'}</span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       {errorAccion && (
-        <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-2.5 text-center text-xs text-red-200">
+        <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-center text-xs font-medium text-red-700">
           {errorAccion}
         </div>
       )}
 
-      {/* Contenido de la Sala */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* Zona principal (Video / Pizarra marcadores de posición) */}
-        <div className="flex-1 p-4 lg:p-6 flex flex-col gap-4 overflow-y-auto">
-          <div className="flex items-center justify-between bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-xs">
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  sala.estado === 'Activa'
-                    ? 'bg-emerald-500 animate-pulse'
-                    : 'bg-blue-400'
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-3 px-3 py-3 sm:px-5 sm:py-4 lg:min-h-0">
+        {/* Selector de vista y estado */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+            {vistas.map((opcion) => (
+              <button
+                key={opcion.id}
+                type="button"
+                onClick={() => setVista(opcion.id)}
+                aria-pressed={vista === opcion.id}
+                aria-label={opcion.etiqueta}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors sm:px-3 ${
+                  vista === opcion.id
+                    ? 'bg-[#0B4FC4] text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                 }`}
-              ></span>
-              <span className="font-semibold text-slate-200">
-                {sala.estado === 'Activa'
-                  ? 'Videollamada y Pizarra Activas'
-                  : 'Sala programada'}
-              </span>
-            </div>
-            <span className="text-slate-400">
-              {sala.participantesActuales} participante
-              {sala.participantesActuales === 1 ? '' : 's'} conectado
-              {sala.participantesActuales === 1 ? '' : 's'}
-            </span>
+              >
+                <span aria-hidden="true" className="flex items-center">
+                  {opcion.icono}
+                </span>
+                <span>
+                  {opcion.id === 'dividida'
+                    ? 'Dividida'
+                    : opcion.id === 'video'
+                      ? 'Video'
+                      : 'Pizarra'}
+                </span>
+              </button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-[350px]">
-            {/* Videollamada marcador */}
-            <div className="bg-slate-800 rounded-2xl border border-slate-700 relative overflow-hidden flex flex-col items-center justify-center p-6 text-center">
-              <div className="absolute top-3 left-3 bg-slate-900/80 px-3 py-1 rounded-lg text-xs font-medium text-slate-300">
-                📹 Videollamada (próximamente)
-              </div>
-              <div className="w-20 h-20 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center text-3xl font-bold mb-3 border border-blue-500/30">
-                👥
-              </div>
-              <h3 className="font-bold text-sm text-slate-200">
-                Sala de Estudio Simultáneo
-              </h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                La transmisión de video y audio en tiempo real se habilitará con
-                el servicio de terceros integrado.
-              </p>
-            </div>
-
-            {/* Pizarra marcador */}
-            <div className="bg-slate-800 rounded-2xl border border-slate-700 relative overflow-hidden flex flex-col items-center justify-center p-6 text-center">
-              <div className="absolute top-3 left-3 bg-slate-900/80 px-3 py-1 rounded-lg text-xs font-medium text-slate-300">
-                ✏️ Pizarra colaborativa (próximamente)
-              </div>
-              <div className="w-20 h-20 bg-emerald-600/20 text-emerald-400 rounded-full flex items-center justify-center text-3xl font-bold mb-3 border border-emerald-500/30">
-                📐
-              </div>
-              <h3 className="font-bold text-sm text-slate-200">
-                Espacio de Ejercicios en Conjunto
-              </h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                Resolución simultánea de fórmulas y gráficas matemáticas
-                sincronizadas en tiempo real.
-              </p>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {video.enLlamada && vista !== 'video' && (
+              <button
+                type="button"
+                onClick={() => setVista('video')}
+                title="Volver a la videollamada"
+                className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                En llamada
+              </button>
+            )}
+            <span className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+              <span className={`h-2 w-2 rounded-full ${estadoSala.color}`} />
+              {estadoSala.texto}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+              👥 {sala.participantesActuales}/{sala.cupoMaximo}
+            </span>
+            <span className="max-w-[150px] truncate rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-500 md:hidden">
+              {sala.titulo}
+            </span>
           </div>
         </div>
 
-        {/* Panel Lateral: Mensajería | Participantes | Materiales (Referencia visual 5 derecha) */}
-        <div className="w-full lg:w-96 bg-slate-800 border-t lg:border-t-0 lg:border-l border-slate-700 flex flex-col h-[450px] lg:h-auto">
-          <div className="p-3 border-b border-slate-700 flex items-center justify-between">
-            <div className="flex gap-1 bg-slate-900 p-1 rounded-xl w-full">
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'chat'
-                    ? 'bg-[#0B4FC4] text-white shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Mensajes
-              </button>
-              <button
-                onClick={() => setActiveTab('participantes')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'participantes'
-                    ? 'bg-[#0B4FC4] text-white shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Participantes ({sala.participantesActuales})
-              </button>
-              <button
-                onClick={() => setActiveTab('materiales')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'materiales'
-                    ? 'bg-[#0B4FC4] text-white shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Materiales
-              </button>
-            </div>
-          </div>
-
-          {/* Contenido de la pestaña activa */}
-          {activeTab === 'chat' && (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="px-3 py-2 border-b border-slate-700/60 flex items-center justify-between text-[10px] text-slate-400">
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      conectadoChat ? 'bg-emerald-400' : 'bg-slate-500'
-                    }`}
-                  ></span>
-                  {sala.participando
-                    ? conectadoChat
-                      ? `${usuariosEnLinea.length} en línea`
-                      : 'Conectando…'
-                    : 'Solo participantes'}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 xl:flex-row">
+          {/* Columna de participantes / videollamada */}
+          {vista !== 'pizarra' && (
+            <aside
+              className={`${
+                vista === 'video' ? 'hidden xl:flex' : 'flex'
+              } w-full shrink-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm xl:w-60`}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold text-slate-700">
+                  {vista === 'video' ? 'En la videollamada' : 'En la sala'}
+                </h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                  {sala.participantesActuales}
                 </span>
-                {mensajes.length > 0 && (
-                  <span>
-                    {mensajes.length} mensaje{mensajes.length === 1 ? '' : 's'}
-                  </span>
-                )}
               </div>
 
-              <div
-                ref={chatScrollRef}
-                className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3"
-              >
-                {!sala.participando ? (
-                  <div className="flex h-full flex-col items-center justify-center text-center">
-                    <div className="text-3xl mb-3">💬</div>
-                    <p className="text-xs font-semibold text-slate-300">
-                      Únete para participar en la mensajería
-                    </p>
-                    <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
-                      Solo los participantes activos de la sala pueden leer y
-                      enviar mensajes.
-                    </p>
+              {participantes.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                  {participantes.map((participante) =>
+                    tileParticipante(participante, true)
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center">
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    Aún no hay participantes
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Sé la primera persona en unirte.
+                  </p>
+                </div>
+              )}
+
+              {!sala.participando && (
+                <button
+                  type="button"
+                  onClick={handleUnirse}
+                  disabled={uniendose}
+                  className="rounded-xl bg-[#0B4FC4] px-3 py-2 text-[11px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {uniendose ? 'Entrando…' : 'Unirme a la sala'}
+                </button>
+              )}
+
+              {video.enLlamada ? (
+                <div className="mt-auto rounded-xl border border-emerald-100 bg-emerald-50/60 px-2.5 py-2">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                      En llamada · {Object.keys(video.remotos).length + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVista('video')}
+                      className="text-[10px] font-bold text-[#0B4FC4] hover:underline"
+                    >
+                      Ver
+                    </button>
                   </div>
-                ) : cargandoHistorial ? (
-                  <div className="flex h-full flex-col items-center justify-center text-center">
-                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-blue-400" />
-                    <p className="mt-3 text-[11px] text-slate-400">
-                      Cargando mensajes…
-                    </p>
+                  <div className="grid grid-cols-4 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void video.alternarMicrofono()}
+                      aria-label={
+                        video.estadoLocal.microfono
+                          ? 'Silenciar micrófono'
+                          : 'Activar micrófono'
+                      }
+                      title={
+                        video.estadoLocal.microfono
+                          ? 'Silenciar micrófono'
+                          : 'Activar micrófono'
+                      }
+                      className={`flex h-7 items-center justify-center rounded-lg text-xs ${
+                        video.estadoLocal.microfono
+                          ? 'bg-white text-[#0B4FC4]'
+                          : 'bg-white/70 text-slate-400'
+                      }`}
+                    >
+                      {video.estadoLocal.microfono ? '🎤' : '🔇'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void video.alternarCamara()}
+                      aria-label={
+                        video.estadoLocal.camara
+                          ? 'Apagar cámara'
+                          : 'Activar cámara'
+                      }
+                      title={
+                        video.estadoLocal.camara
+                          ? 'Apagar cámara'
+                          : 'Activar cámara'
+                      }
+                      className={`flex h-7 items-center justify-center rounded-lg text-xs ${
+                        video.estadoLocal.camara
+                          ? 'bg-white text-[#0B4FC4]'
+                          : 'bg-white/70 text-slate-400'
+                      }`}
+                    >
+                      {video.estadoLocal.camara ? '🎥' : '📷'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void video.alternarPantalla()}
+                      aria-label={
+                        video.compartiendo
+                          ? 'Dejar de compartir pantalla'
+                          : 'Compartir pantalla'
+                      }
+                      title={
+                        video.compartiendo
+                          ? 'Dejar de compartir pantalla'
+                          : 'Compartir pantalla'
+                      }
+                      className={`flex h-7 items-center justify-center rounded-lg text-xs ${
+                        video.compartiendo
+                          ? 'bg-white text-[#0B4FC4]'
+                          : 'bg-white/70 text-slate-400'
+                      }`}
+                    >
+                      🖥
+                    </button>
+                    <button
+                      type="button"
+                      onClick={video.salir}
+                      aria-label="Salir de la llamada"
+                      title="Salir de la llamada"
+                      className="flex h-7 items-center justify-center rounded-lg bg-red-50 text-xs text-red-600 hover:bg-red-100"
+                    >
+                      ☎
+                    </button>
                   </div>
-                ) : mensajes.length === 0 ? (
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setVista('video')}
+                  className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#0B4FC4]"
+                >
+                  <span aria-hidden="true">🎥</span>
+                  Abrir videollamada
+                </button>
+              )}
+            </aside>
+          )}
+
+          {/* Zona central: pizarra o videollamada */}
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {vista === 'video' ? (
+              <Videollamada
+                video={video}
+                usuarioId={user.id}
+                participantes={participantes.map((participante) => ({
+                  id: participante.id,
+                  nombre: participante.nombre,
+                  esAnfitrion: participante.esAnfitrion,
+                }))}
+                usuariosEnLinea={usuariosEnLinea}
+                puedeParticipar={sala.participando && conectadoChat}
+              />
+            ) : (
+              <div className="flex min-h-[460px] flex-1 flex-col xl:min-h-0">
+                <Pizarra
+                  salaId={salaId ?? ''}
+                  socket={socketPizarra}
+                  participando={sala.participando}
+                  conexionLista={conectadoChat}
+                  esAnfitrion={sala.esAnfitrion}
+                  usuario={{ id: user.id, nombre: user.nombre }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Panel de colaboración */}
+          <aside className="flex h-[540px] w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:h-auto xl:w-[360px]">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-bold text-slate-800">
+                  Colaboración de la sala
+                </h2>
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    conectadoChat ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`}
+                />
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Chat, participantes y materiales en tiempo real
+              </p>
+            </div>
+
+            <div className="border-b border-slate-100 p-2">
+              <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+                {pestañas.map((pestaña) => (
+                  <button
+                    key={pestaña.id}
+                    type="button"
+                    onClick={() => setActiveTab(pestaña.id)}
+                    className={`flex flex-1 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-bold transition-all ${
+                      activeTab === pestaña.id
+                        ? 'bg-white text-[#0B4FC4] shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <span>{pestaña.etiqueta}</span>
+                    {pestaña.id !== 'chat' && (
+                      <span
+                        className={`rounded-full px-1.5 text-[9px] ${
+                          activeTab === pestaña.id
+                            ? 'bg-blue-50 text-[#0B4FC4]'
+                            : 'bg-white text-slate-400'
+                        }`}
+                      >
+                        {pestaña.contador}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat */}
+            {activeTab === 'chat' && (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 text-[10px] text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        conectadoChat ? 'bg-emerald-500' : 'bg-slate-300'
+                      }`}
+                    />
+                    {sala.participando
+                      ? conectadoChat
+                        ? `${usuariosEnLinea.length} en línea`
+                        : 'Conectando…'
+                      : 'Solo participantes'}
+                  </span>
+                  {mensajes.length > 0 && (
+                    <span>
+                      {mensajes.length} mensaje{mensajes.length === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  ref={chatScrollRef}
+                  className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3"
+                >
+                  {!sala.participando ? (
+                    <div className="flex h-full flex-col items-center justify-center text-center">
+                      <div className="mb-3 text-3xl">💬</div>
+                      <p className="text-xs font-semibold text-slate-600">
+                        Únete para participar en la mensajería
+                      </p>
+                      <p className="mt-1 max-w-[230px] text-[11px] leading-relaxed text-slate-400">
+                        Solo los participantes activos de la sala pueden leer y
+                        enviar mensajes.
+                      </p>
+                    </div>
+                  ) : cargandoHistorial ? (
+                    <div className="flex h-full flex-col items-center justify-center text-center">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#0B4FC4]" />
+                      <p className="mt-3 text-[11px] text-slate-400">
+                        Cargando mensajes…
+                      </p>
+                    </div>
+                  ) : mensajes.length === 0 ? (
+                    <div className="flex h-full flex-col items-center justify-center text-center">
+                      <div className="mb-3 text-3xl">💬</div>
+                      <p className="text-xs font-semibold text-slate-600">
+                        Aún no hay mensajes
+                      </p>
+                      <p className="mt-1 max-w-[230px] text-[11px] leading-relaxed text-slate-400">
+                        Escribe el primer mensaje y comienza a estudiar en
+                        equipo.
+                      </p>
+                    </div>
+                  ) : (
+                    mensajes.map((mensaje) => {
+                      const esMio = mensaje.usuario.id === user.id;
+
+                      return (
+                        <div
+                          key={mensaje.id}
+                          className={`flex gap-2 ${esMio ? 'flex-row-reverse' : ''}`}
+                        >
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[10px] font-bold text-[#0B4FC4]">
+                            {inicialesDe(mensaje.usuario.nombre)}
+                          </div>
+                          <div
+                            className={`flex max-w-[80%] flex-col ${
+                              esMio ? 'items-end' : 'items-start'
+                            }`}
+                          >
+                            <div className="mb-0.5 flex items-center gap-2 px-0.5">
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                {esMio ? 'Tú' : mensaje.usuario.nombre}
+                              </span>
+                              <span className="text-[9px] text-slate-400">
+                                {horaDe(mensaje.enviadoEn)}
+                              </span>
+                            </div>
+                            <p
+                              className={`whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-xs leading-relaxed ${
+                                esMio
+                                  ? 'rounded-tr-sm bg-[#0B4FC4] text-white'
+                                  : 'rounded-tl-sm border border-slate-200 bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              {mensaje.contenido}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {errorChat && (
+                  <div
+                    role="alert"
+                    className="mx-3 mb-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-[10px] leading-relaxed text-red-700"
+                  >
+                    {errorChat}
+                  </div>
+                )}
+
+                <form
+                  onSubmit={handleEnviarMensaje}
+                  className="flex items-center gap-2 border-t border-slate-100 bg-white p-2.5"
+                >
+                  <input
+                    type="text"
+                    value={mensajeTexto}
+                    onChange={(e) => setMensajeTexto(e.target.value)}
+                    maxLength={MAX_MENSAJE}
+                    disabled={!puedeEscribir || enviandoMensaje}
+                    placeholder={
+                      !sala.participando
+                        ? 'Únete para escribir en la mensajería'
+                        : !conectadoChat
+                          ? 'Conectando a la mensajería…'
+                          : 'Escribe un mensaje…'
+                    }
+                    aria-label="Mensaje para la sala"
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={
+                      !puedeEscribir || enviandoMensaje || !mensajeTexto.trim()
+                    }
+                    aria-label="Enviar mensaje"
+                    className="rounded-xl bg-[#0B4FC4] p-2 text-xs font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {enviandoMensaje ? '…' : '➤'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Participantes */}
+            {activeTab === 'participantes' && (
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                {participantes.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center text-center">
-                    <div className="text-3xl mb-3">💬</div>
-                    <p className="text-xs font-semibold text-slate-300">
-                      Aún no hay mensajes
+                    <div className="mb-2 text-3xl">👥</div>
+                    <p className="text-xs font-semibold text-slate-600">
+                      Todavía no hay participantes
                     </p>
-                    <p className="mt-1 max-w-[220px] text-[11px] leading-relaxed text-slate-500">
-                      Escribe el primer mensaje y comienza a estudiar en equipo.
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Sé la primera persona en unirte a esta sala.
                     </p>
                   </div>
                 ) : (
-                  mensajes.map((mensaje) => {
-                    const esMio = mensaje.usuario.id === user.id;
+                  participantes.map((participante) => {
+                    const esYo = participante.id === user.id;
+                    const enLinea = usuariosEnLinea.includes(participante.id);
+                    const rol = participante.esAnfitrion
+                      ? 'Anfitrión/a'
+                      : esYo
+                        ? 'Tú'
+                        : participante.rol === 'TUTOR'
+                          ? 'Monitor'
+                          : 'Estudiante';
 
                     return (
                       <div
-                        key={mensaje.id}
-                        className={`flex gap-2 ${esMio ? 'flex-row-reverse' : ''}`}
+                        key={participante.id}
+                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5"
                       >
-                        <div className="w-7 h-7 shrink-0 bg-blue-600/30 text-blue-300 rounded-full flex items-center justify-center font-bold text-[10px]">
-                          {inicialesDe(mensaje.usuario.nombre)}
-                        </div>
-                        <div
-                          className={`max-w-[80%] flex flex-col ${
-                            esMio ? 'items-end' : 'items-start'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-0.5 px-0.5">
-                            <span className="text-[10px] font-semibold text-slate-300">
-                              {esMio ? 'Tú' : mensaje.usuario.nombre}
-                            </span>
-                            <span className="text-[9px] text-slate-500">
-                              {horaDe(mensaje.enviadoEn)}
-                            </span>
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-[#0B4FC4]">
+                            {inicialesDe(participante.nombre)}
                           </div>
-                          <p
-                            className={`rounded-xl px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap ${
-                              esMio
-                                ? 'bg-[#0B4FC4] text-white rounded-tr-sm'
-                                : 'bg-slate-900/70 text-slate-200 border border-slate-700/50 rounded-tl-sm'
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-700">
+                              {participante.nombre}
+                              {esYo ? ' (Tú)' : ''}
+                            </h4>
+                            <p className="text-[10px] text-slate-400">{rol}</p>
+                          </div>
+                        </div>
+                        {sala.participando && (
+                          <span
+                            className={`flex items-center gap-1 text-[10px] font-medium ${
+                              enLinea ? 'text-emerald-600' : 'text-slate-400'
                             }`}
                           >
-                            {mensaje.contenido}
-                          </p>
-                        </div>
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                enLinea ? 'bg-emerald-500' : 'bg-slate-300'
+                              }`}
+                            />
+                            {enLinea ? 'En línea' : 'Desconectado'}
+                          </span>
+                        )}
                       </div>
                     );
                   })
                 )}
               </div>
+            )}
 
-              {errorChat && (
-                <div
-                  role="alert"
-                  className="mx-3 mb-2 rounded-lg border border-red-700/60 bg-red-900/30 px-2.5 py-2 text-[10px] leading-relaxed text-red-200"
-                >
-                  {errorChat}
-                </div>
-              )}
-
-              <form
-                onSubmit={handleEnviarMensaje}
-                className="p-3 bg-slate-900 border-t border-slate-700 flex items-center gap-2"
-              >
-                <input
-                  type="text"
-                  value={mensajeTexto}
-                  onChange={(e) => setMensajeTexto(e.target.value)}
-                  maxLength={MAX_MENSAJE}
-                  disabled={!puedeEscribir || enviandoMensaje}
-                  placeholder={
-                    !sala.participando
-                      ? 'Únete para escribir en la mensajería'
-                      : !conectadoChat
-                        ? 'Conectando a la mensajería…'
-                        : 'Escribe un mensaje…'
-                  }
-                  aria-label="Mensaje para la sala"
-                  className="flex-1 min-w-0 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] disabled:cursor-not-allowed disabled:opacity-60"
-                />
-                <button
-                  type="submit"
-                  disabled={
-                    !puedeEscribir || enviandoMensaje || !mensajeTexto.trim()
-                  }
-                  aria-label="Enviar mensaje"
-                  className="p-2 bg-[#0B4FC4] hover:bg-[#093fa3] text-white rounded-xl text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {enviandoMensaje ? '…' : '➤'}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {activeTab === 'participantes' && (
-            <div className="flex-1 p-4 overflow-y-auto space-y-3">
-              {participantes.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center text-center">
-                  <div className="text-3xl mb-2">👥</div>
-                  <p className="text-xs font-semibold text-slate-300">
-                    Todavía no hay participantes
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Sé la primera persona en unirte a esta sala.
-                  </p>
-                </div>
-              ) : (
-                participantes.map((participante) => {
-                  const esYo = participante.id === user.id;
-                  const enLinea = usuariosEnLinea.includes(participante.id);
-                  const rol = participante.esAnfitrion
-                    ? 'Anfitrión/a'
-                    : esYo
-                      ? 'Tú'
-                      : participante.rol === 'TUTOR'
-                        ? 'Monitor'
-                        : 'Estudiante';
-
-                  return (
-                    <div
-                      key={participante.id}
-                      className="flex items-center justify-between p-2.5 bg-slate-900/50 rounded-xl border border-slate-700/50"
+            {/* Materiales */}
+            {activeTab === 'materiales' && (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-[10px] text-slate-400">
+                  <span>
+                    {sala.participando
+                      ? `${materiales.length} material${
+                          materiales.length === 1 ? '' : 'es'
+                        }`
+                      : 'Solo participantes'}
+                  </span>
+                  {sala.participando && (
+                    <button
+                      type="button"
+                      onClick={() => materialInputRef.current?.click()}
+                      disabled={subiendoMaterial}
+                      className="rounded-lg bg-[#0B4FC4] px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 bg-blue-600/30 text-blue-400 rounded-full flex items-center justify-center font-bold text-xs">
-                          {inicialesDe(participante.nombre)}
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-200">
-                            {participante.nombre}
-                            {esYo ? ' (Tú)' : ''}
-                          </h4>
-                          <p className="text-[10px] text-slate-400">{rol}</p>
-                        </div>
-                      </div>
-                      {sala.participando && (
-                        <span
-                          className={`text-[10px] font-medium flex items-center gap-1 ${
-                            enLinea ? 'text-emerald-400' : 'text-slate-500'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              enLinea ? 'bg-emerald-400' : 'bg-slate-500'
-                            }`}
-                          ></span>
-                          {enLinea ? 'En línea' : 'Desconectado'}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-
-          {activeTab === 'materiales' && (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="px-3 py-2 border-b border-slate-700/60 flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                <span>
-                  {sala.participando
-                    ? `${materiales.length} material${materiales.length === 1 ? '' : 'es'}`
-                    : 'Solo participantes'}
-                </span>
-                {sala.participando && (
-                  <button
-                    type="button"
-                    onClick={() => materialInputRef.current?.click()}
-                    disabled={subiendoMaterial}
-                    className="rounded-lg bg-[#0B4FC4] px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    + Subir material
-                  </button>
-                )}
-              </div>
-
-              {!sala.participando ? (
-                <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-                  <div className="text-3xl mb-3">🔒</div>
-                  <p className="text-xs font-semibold text-slate-300">
-                    Materiales para participantes
-                  </p>
-                  <p className="mt-1 max-w-[240px] text-[11px] leading-relaxed text-slate-500">
-                    Únete a la sala para consultar, descargar y compartir los
-                    archivos de estudio del grupo.
-                  </p>
+                      + Subir archivo
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <>
-                  <form
-                    onSubmit={handleSubirMaterial}
-                    className="space-y-2 border-b border-slate-700/60 p-3"
-                  >
-                    <input
-                      ref={materialInputRef}
-                      type="file"
-                      accept={EXTENSIONES_MATERIALES.join(',')}
-                      onChange={handleSeleccionarArchivo}
-                      className="sr-only"
-                      aria-label="Seleccionar material de estudio"
-                    />
 
-                    {archivoSeleccionado ? (
-                      <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-2.5">
-                        <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${
-                            iconoDeMaterial(archivoSeleccionado.name).clase
-                          }`}
-                        >
-                          {iconoDeMaterial(archivoSeleccionado.name).emoji}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="truncate text-[11px] font-semibold text-slate-200"
-                            title={archivoSeleccionado.name}
-                          >
-                            {archivoSeleccionado.name}
-                          </p>
-                          <p className="mt-0.5 text-[10px] text-slate-500">
-                            {formatearTamano(archivoSeleccionado.size)} · Listo
-                            para subir
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={limpiarArchivo}
-                          disabled={subiendoMaterial}
-                          aria-label="Quitar archivo seleccionado"
-                          className="rounded-lg px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => materialInputRef.current?.click()}
-                        className="w-full rounded-xl border border-dashed border-slate-600 bg-slate-900/40 px-3 py-4 text-center transition-colors hover:border-blue-500/60 hover:bg-slate-900/70"
-                      >
-                        <span className="block text-lg">📎</span>
-                        <span className="mt-1 block text-[11px] font-semibold text-slate-300">
-                          Elegir archivo
-                        </span>
-                        <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">
-                          PDF, documentos, presentaciones, hojas de cálculo,
-                          texto o imágenes · máx. 10 MB
-                        </span>
-                      </button>
-                    )}
+                {!sala.participando ? (
+                  <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+                    <div className="mb-3 text-3xl">🔒</div>
+                    <p className="text-xs font-semibold text-slate-600">
+                      Materiales para participantes
+                    </p>
+                    <p className="mt-1 max-w-[240px] text-[11px] leading-relaxed text-slate-400">
+                      Únete a la sala para consultar, descargar y compartir los
+                      archivos de estudio del grupo.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <form
+                      onSubmit={handleSubirMaterial}
+                      className="space-y-2 border-b border-slate-100 p-3"
+                    >
+                      <input
+                        ref={materialInputRef}
+                        type="file"
+                        accept={EXTENSIONES_MATERIALES.join(',')}
+                        onChange={handleSeleccionarArchivo}
+                        className="sr-only"
+                        aria-label="Seleccionar material de estudio"
+                      />
 
-                    {archivoSeleccionado && (
-                      <>
-                        <input
-                          type="text"
-                          value={descripcionMaterial}
-                          onChange={(e) =>
-                            setDescripcionMaterial(e.target.value)
-                          }
-                          maxLength={MAX_DESCRIPCION_MATERIAL}
-                          disabled={subiendoMaterial}
-                          placeholder="Descripción opcional"
-                          aria-label="Descripción del material"
-                          className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] disabled:opacity-60"
-                        />
-                        <div className="flex justify-end gap-2">
+                      {archivoSeleccionado ? (
+                        <>
+                          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                            <div
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${
+                                iconoDeMaterial(archivoSeleccionado.name).clase
+                              }`}
+                            >
+                              {iconoDeMaterial(archivoSeleccionado.name).emoji}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className="truncate text-[11px] font-semibold text-slate-700"
+                                title={archivoSeleccionado.name}
+                              >
+                                {archivoSeleccionado.name}
+                              </p>
+                              <p className="mt-0.5 text-[10px] text-slate-400">
+                                {formatearTamano(archivoSeleccionado.size)} ·
+                                Listo para subir
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={limpiarArchivo}
+                              disabled={subiendoMaterial}
+                              aria-label="Quitar archivo seleccionado"
+                              className="rounded-lg px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 disabled:opacity-50"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={descripcionMaterial}
+                            onChange={(e) =>
+                              setDescripcionMaterial(e.target.value)
+                            }
+                            maxLength={MAX_DESCRIPCION_MATERIAL}
+                            disabled={subiendoMaterial}
+                            placeholder="Descripción opcional"
+                            aria-label="Descripción del material"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] disabled:opacity-60"
+                          />
+
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={limpiarArchivo}
+                              disabled={subiendoMaterial}
+                              className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[10px] font-bold text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-60"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={subiendoMaterial}
+                              className="rounded-lg bg-[#0B4FC4] px-2.5 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {subiendoMaterial ? 'Subiendo…' : 'Subir material'}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
                           <button
                             type="button"
-                            onClick={limpiarArchivo}
-                            disabled={subiendoMaterial}
-                            className="rounded-lg bg-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-200 transition-colors hover:bg-slate-600 disabled:opacity-60"
+                            onClick={() => materialInputRef.current?.click()}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500 transition-colors hover:border-[#0B4FC4] hover:text-[#0B4FC4]"
                           >
-                            Cancelar
+                            <span aria-hidden="true">📎</span>
+                            <span>Subir archivo</span>
                           </button>
-                          <button
-                            type="submit"
-                            disabled={subiendoMaterial}
-                            className="rounded-lg bg-[#0B4FC4] px-2.5 py-1.5 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {subiendoMaterial ? 'Subiendo…' : 'Subir material'}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </form>
-
-                  {errorMateriales && (
-                    <div
-                      role="alert"
-                      className="mx-3 mt-2 flex items-start justify-between gap-2 rounded-lg border border-red-700/60 bg-red-900/30 px-2.5 py-2 text-[10px] leading-relaxed text-red-200"
-                    >
-                      <span>{errorMateriales}</span>
-                      {materiales.length === 0 && (
-                        <button
-                          type="button"
-                          onClick={() => cargarMateriales()}
-                          disabled={cargandoMateriales}
-                          className="shrink-0 rounded-lg bg-red-800/60 px-2 py-1 font-bold text-red-100 transition-colors hover:bg-red-700 disabled:opacity-60"
-                        >
-                          Reintentar
-                        </button>
+                          <p className="text-center text-[10px] leading-relaxed text-slate-400">
+                            PDF, documentos, presentaciones, hojas de cálculo,
+                            texto o imágenes · máx. 10 MB
+                          </p>
+                        </>
                       )}
-                    </div>
-                  )}
+                    </form>
 
-                  <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
-                    {cargandoMateriales ? (
-                      <div className="flex h-full flex-col items-center justify-center text-center">
-                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-blue-400" />
-                        <p className="mt-3 text-[11px] text-slate-400">
-                          Cargando materiales…
-                        </p>
-                      </div>
-                    ) : materiales.length === 0 ? (
-                      <div className="flex h-full flex-col items-center justify-center text-center">
-                        <div className="text-3xl mb-3">📄</div>
-                        <p className="text-xs font-semibold text-slate-300">
-                          Aún no hay materiales
-                        </p>
-                        <p className="mt-1 max-w-[230px] text-[11px] leading-relaxed text-slate-500">
-                          Sube guías, talleres o apuntes para que el grupo los
-                          tenga a mano.
-                        </p>
-                      </div>
-                    ) : (
-                      materiales.map((material) => {
-                        const icono = iconoDeMaterial(material.nombre);
-                        const confirmando =
-                          confirmarEliminarId === material.id;
-
-                        return (
-                          <div
-                            key={material.id}
-                            className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-2.5"
+                    {errorMateriales && (
+                      <div
+                        role="alert"
+                        className="mx-3 mt-2 flex items-start justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-[10px] leading-relaxed text-red-700"
+                      >
+                        <span>{errorMateriales}</span>
+                        {materiales.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={() => cargarMateriales()}
+                            disabled={cargandoMateriales}
+                            className="shrink-0 rounded-lg bg-red-100 px-2 py-1 font-bold text-red-700 transition-colors hover:bg-red-200 disabled:opacity-60"
                           >
-                            <div className="flex items-start gap-2.5">
-                              <div
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${icono.clase}`}
-                              >
-                                {icono.emoji}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p
-                                  className="break-words text-[11px] font-semibold leading-snug text-slate-200"
-                                  title={material.nombre}
-                                >
-                                  {material.nombre}
-                                </p>
-                                {material.descripcion && (
-                                  <p className="mt-0.5 break-words text-[10px] leading-relaxed text-slate-400">
-                                    {material.descripcion}
-                                  </p>
-                                )}
-                                <p className="mt-1 text-[9px] text-slate-500">
-                                  {material.usuario.id === user.id
-                                    ? 'Tú'
-                                    : material.usuario.nombre}{' '}
-                                  · {fechaCortaDe(material.creadoEn)} ·{' '}
-                                  {formatearTamano(material.tamano)}
-                                </p>
-                              </div>
-                            </div>
+                            Reintentar
+                          </button>
+                        )}
+                      </div>
+                    )}
 
-                            {confirmando ? (
-                              <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-red-900/20 px-2 py-1.5">
-                                <span className="text-[10px] text-red-200">
-                                  ¿Eliminar este material?
-                                </span>
-                                <div className="flex shrink-0 gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmarEliminarId(null)}
-                                    disabled={
-                                      eliminandoMaterialId === material.id
-                                    }
-                                    className="rounded-lg bg-slate-700 px-2 py-1 text-[10px] font-bold text-slate-200 transition-colors hover:bg-slate-600 disabled:opacity-60"
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                      {cargandoMateriales ? (
+                        <div className="flex h-full flex-col items-center justify-center text-center">
+                          <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#0B4FC4]" />
+                          <p className="mt-3 text-[11px] text-slate-400">
+                            Cargando materiales…
+                          </p>
+                        </div>
+                      ) : materiales.length === 0 ? (
+                        <div className="flex h-full flex-col items-center justify-center text-center">
+                          <div className="mb-3 text-3xl">📄</div>
+                          <p className="text-xs font-semibold text-slate-600">
+                            Aún no hay materiales
+                          </p>
+                          <p className="mt-1 max-w-[230px] text-[11px] leading-relaxed text-slate-400">
+                            Sube guías, talleres o apuntes para que el grupo los
+                            tenga a mano.
+                          </p>
+                        </div>
+                      ) : (
+                        materiales.map((material) => {
+                          const icono = iconoDeMaterial(material.nombre);
+                          const confirmando =
+                            confirmarEliminarId === material.id;
+
+                          return (
+                            <div
+                              key={material.id}
+                              className="rounded-xl border border-slate-200 bg-white p-2.5"
+                            >
+                              <div className="flex items-start gap-2.5">
+                                <div
+                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base ${icono.clase}`}
+                                >
+                                  {icono.emoji}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className="break-words text-[11px] font-semibold leading-snug text-slate-700"
+                                    title={material.nombre}
                                   >
-                                    No
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleEliminarMaterial(material)
-                                    }
-                                    disabled={
-                                      eliminandoMaterialId === material.id
-                                    }
-                                    className="rounded-lg bg-red-600 px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {eliminandoMaterialId === material.id
-                                      ? 'Eliminando…'
-                                      : 'Sí, eliminar'}
-                                  </button>
+                                    {material.nombre}
+                                  </p>
+                                  {material.descripcion && (
+                                    <p className="mt-0.5 break-words text-[10px] leading-relaxed text-slate-500">
+                                      {material.descripcion}
+                                    </p>
+                                  )}
+                                  <p className="mt-1 text-[9px] text-slate-400">
+                                    {material.usuario.id === user.id
+                                      ? 'Tú'
+                                      : material.usuario.nombre}{' '}
+                                    · {fechaCortaDe(material.creadoEn)} ·{' '}
+                                    {formatearTamano(material.tamano)}
+                                  </p>
                                 </div>
                               </div>
-                            ) : (
-                              <div className="mt-2 flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDescargarMaterial(material)
-                                  }
-                                  disabled={
-                                    descargandoMaterialId === material.id
-                                  }
-                                  className="rounded-lg bg-slate-700 px-2 py-1 text-[10px] font-bold text-slate-200 transition-colors hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {descargandoMaterialId === material.id
-                                    ? 'Descargando…'
-                                    : '↓ Descargar'}
-                                </button>
-                                {material.puedeEliminar && (
+
+                              {confirmando ? (
+                                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-red-50 px-2 py-1.5">
+                                  <span className="text-[10px] text-red-700">
+                                    ¿Eliminar este material?
+                                  </span>
+                                  <div className="flex shrink-0 gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmarEliminarId(null)}
+                                      disabled={
+                                        eliminandoMaterialId === material.id
+                                      }
+                                      className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-60"
+                                    >
+                                      No
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleEliminarMaterial(material)
+                                      }
+                                      disabled={
+                                        eliminandoMaterialId === material.id
+                                      }
+                                      className="rounded-lg bg-red-600 px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {eliminandoMaterialId === material.id
+                                        ? 'Eliminando…'
+                                        : 'Sí, eliminar'}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="mt-2 flex items-center justify-end gap-1.5">
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      setConfirmarEliminarId(material.id)
+                                      handleDescargarMaterial(material)
                                     }
-                                    aria-label={`Eliminar ${material.nombre}`}
-                                    className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-300 transition-colors hover:bg-red-600 hover:text-white"
+                                    disabled={
+                                      descargandoMaterialId === material.id
+                                    }
+                                    className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
-                                    Eliminar
+                                    {descargandoMaterialId === material.id
+                                      ? 'Descargando…'
+                                      : '↓ Descargar'}
                                   </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                                  {material.puedeEliminar && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setConfirmarEliminarId(material.id)
+                                      }
+                                      aria-label={`Eliminar ${material.nombre}`}
+                                      className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 transition-colors hover:bg-red-600 hover:text-white"
+                                    >
+                                      Eliminar
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
-          {/* Footer indicador de conexión */}
-          <div className="p-2 bg-slate-900 border-t border-slate-700 text-center text-[10px] text-slate-400 flex items-center justify-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${estadoConexion.color}`}></span>
-            <span>{estadoConexion.texto}</span>
-          </div>
+            {/* Indicador de conexión */}
+            <div className="flex items-center justify-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2 text-center text-[10px] text-slate-500">
+              <span className={`h-2 w-2 rounded-full ${estadoConexion.color}`} />
+              <span>{estadoConexion.texto}</span>
+            </div>
+          </aside>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
