@@ -6,6 +6,7 @@ import {
   crearMensajeSala,
   esParticipanteActivo,
 } from './chat.service';
+import { registrarPizarra } from './pizarra.socket';
 
 type UsuarioSocket = {
   id: string;
@@ -158,6 +159,9 @@ export function registrarChat(io: Server) {
 
     // Sala privada del usuario: recibe notificaciones en cualquier pantalla.
     socket.join(salaUsuario(usuario.id));
+
+    // Pizarra colaborativa: comparte la autenticación y las salas del chat.
+    registrarPizarra(io, socket, usuario);
 
     socket.on('sala:unirse', async (payload: any, ack?: Acuse) => {
       const salaId = String(payload?.salaId ?? '').trim();
