@@ -96,6 +96,7 @@ export default function SalaEnVivoPage() {
   const [cargandoMateriales, setCargandoMateriales] = useState(false);
   const [errorMateriales, setErrorMateriales] = useState('');
   const [archivoSeleccionado, setArchivoSeleccionado] = useState<File | null>(null);
+  const [arrastrandoArchivo, setArrastrandoArchivo] = useState(false);
   const [descripcionMaterial, setDescripcionMaterial] = useState('');
   const [subiendoMaterial, setSubiendoMaterial] = useState(false);
   const [descargandoMaterialId, setDescargandoMaterialId] = useState<string | null>(
@@ -453,15 +454,13 @@ export default function SalaEnVivoPage() {
   const limpiarArchivo = () => {
     setArchivoSeleccionado(null);
     setDescripcionMaterial('');
+    setArrastrandoArchivo(false);
     if (materialInputRef.current) {
       materialInputRef.current.value = '';
     }
   };
 
-  const handleSeleccionarArchivo = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const archivo = e.target.files?.[0] ?? null;
+  const seleccionarArchivo = (archivo: File | null) => {
     setErrorMateriales('');
 
     if (!archivo) {
@@ -472,7 +471,9 @@ export default function SalaEnVivoPage() {
     const extension = extensionDe(archivo.name);
     if (!(EXTENSIONES_MATERIALES as readonly string[]).includes(extension)) {
       setArchivoSeleccionado(null);
-      e.target.value = '';
+      if (materialInputRef.current) {
+        materialInputRef.current.value = '';
+      }
       setErrorMateriales(
         'Formato no permitido. Puedes subir PDF, documentos, presentaciones, hojas de cálculo, texto o imágenes JPG, PNG o WEBP.'
       );
@@ -481,12 +482,39 @@ export default function SalaEnVivoPage() {
 
     if (archivo.size > MAX_MATERIAL_BYTES) {
       setArchivoSeleccionado(null);
-      e.target.value = '';
+      if (materialInputRef.current) {
+        materialInputRef.current.value = '';
+      }
       setErrorMateriales('El archivo supera el límite de 10 MB.');
       return;
     }
 
     setArchivoSeleccionado(archivo);
+  };
+
+  const handleSeleccionarArchivo = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    seleccionarArchivo(e.target.files?.[0] ?? null);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (subiendoMaterial) return;
+    setArrastrandoArchivo(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setArrastrandoArchivo(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setArrastrandoArchivo(false);
+    if (subiendoMaterial) return;
+    seleccionarArchivo(e.dataTransfer.files?.[0] ?? null);
   };
 
   const handleSubirMaterial = async (e: React.FormEvent) => {
@@ -1021,22 +1049,12 @@ export default function SalaEnVivoPage() {
 
           {activeTab === 'materiales' && (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="px-3 py-2 border-b border-slate-700/60 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+              <div className="px-3 py-2 border-b border-slate-700/60 text-[10px] text-slate-400">
                 <span>
                   {sala.participando
                     ? `${materiales.length} material${materiales.length === 1 ? '' : 'es'}`
                     : 'Solo participantes'}
                 </span>
-                {sala.participando && (
-                  <button
-                    type="button"
-                    onClick={() => materialInputRef.current?.click()}
-                    disabled={subiendoMaterial}
-                    className="rounded-lg bg-[#0B4FC4] px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    + Subir material
-                  </button>
-                )}
               </div>
 
               {!sala.participando ? (
@@ -1097,20 +1115,46 @@ export default function SalaEnVivoPage() {
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => materialInputRef.current?.click()}
-                        className="w-full rounded-xl border border-dashed border-slate-600 bg-slate-900/40 px-3 py-4 text-center transition-colors hover:border-blue-500/60 hover:bg-slate-900/70"
+                      <div
+                        role="button"
+                        tabIndex={subiendoMaterial ? -1 : 0}
+                        aria-label="Arrastrar o elegir archivo de material"
+                        onClick={() => {
+                          if (subiendoMaterial) return;
+                          materialInputRef.current?.click();
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          e.preventDefault();
+                          if (subiendoMaterial) return;
+                          materialInputRef.current?.click();
+                        }}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        className={`w-full cursor-pointer rounded-xl border border-dashed px-3 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B4FC4] ${
+                          arrastrandoArchivo
+                            ? 'border-blue-400 bg-blue-500/10'
+                            : 'border-slate-600 bg-slate-900/40 hover:border-blue-500/60 hover:bg-slate-900/70'
+                        } ${
+                          subiendoMaterial
+                            ? 'cursor-not-allowed opacity-60'
+                            : ''
+                        }`}
                       >
-                        <span className="block text-lg">📎</span>
+                        <span className="block text-lg">
+                          {arrastrandoArchivo ? '📥' : '📎'}
+                        </span>
                         <span className="mt-1 block text-[11px] font-semibold text-slate-300">
-                          Elegir archivo
+                          {arrastrandoArchivo
+                            ? 'Suelta el archivo aquí'
+                            : 'Arrastra un archivo o haz clic aquí'}
                         </span>
                         <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">
                           PDF, documentos, presentaciones, hojas de cálculo,
                           texto o imágenes · máx. 10 MB
                         </span>
-                      </button>
+                      </div>
                     )}
 
                     {archivoSeleccionado && (

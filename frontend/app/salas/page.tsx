@@ -197,7 +197,13 @@ export default function SalasPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+            <button
+              type="button"
+              onClick={() => router.push('/perfil')}
+              title="Ver mi perfil"
+              aria-label="Ver mi perfil"
+              className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 transition-colors hover:bg-slate-200 hover:border-[#0B4FC4]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B4FC4]/40"
+            >
               <span className="w-7 h-7 bg-[#0B4FC4] text-white rounded-full flex items-center justify-center font-bold text-xs">
                 {user.nombre.substring(0, 2).toUpperCase()}
               </span>
@@ -208,7 +214,7 @@ export default function SalasPage() {
                     ? 'Administrador'
                     : 'Estudiante'}
               </span>
-            </div>
+            </button>
 
             <button
               onClick={() => router.push('/tutorias')}
