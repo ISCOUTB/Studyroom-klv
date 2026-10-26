@@ -1,0 +1,29 @@
+# ============================================================
+# Campus Collaborative Study (UTB) - Base de datos local
+# Uso:
+#   npm run db:up      -> levanta PostgreSQL en localhost:5432
+#   npm run db:down    -> detiene el contenedor (conserva los datos)
+#   npm run db:reset   -> borra el volumen y recrea la BD desde cero
+# ============================================================
+
+services:
+  db:
+    image: postgres:16
+    container_name: studyroom-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: studyroom
+    ports:
+      - "5432:5432"
+    volumes:
+      - studyroom_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d studyroom"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  studyroom_pgdata:

@@ -64,10 +64,16 @@ enum TipoNotificacionEnum {
 model Usuario {
   id                String         @id @default(uuid())
   nombre            String
+  apellido          String?
   correoUnico       String         @unique @map("correo_unico")
   contrasenaHash    String         @map("contrasena_hash")
   salt              String
   rol               RolEnum        @default(ESTUDIANTE)
+  ciudad            String?
+  pais              String         @default("Colombia")
+  zonaHoraria       String         @default("America/Bogota") @map("zona_horaria")
+  visibilidadCorreo String         @default("CURSO") @map("visibilidad_correo")
+  fotoUrl           String?        @map("foto_url")
   emailVerificado   Boolean        @default(false) @map("email_verificado")
   tokenVerificacion String?        @map("token_verificacion")
   resetToken        String?        @map("reset_token")

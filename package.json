@@ -10,8 +10,12 @@
     "build": "npm run build:frontend",
     "build:frontend": "cd frontend && npm run build",
     "start": "cd frontend && npm start",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d db",
     "db:generate": "prisma generate --schema=prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
     "db:seed": "cd backend && npm run seed",
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
   },
