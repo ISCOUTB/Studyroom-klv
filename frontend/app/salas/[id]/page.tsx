@@ -11,6 +11,13 @@ import {
   Videollamada,
   useVideollamada,
 } from '@/components/sala/Videollamada';
+import {
+  IconoColumnas,
+  IconoPizarra,
+  IconoReloj,
+  IconoSalir,
+  IconoVideo,
+} from '@/components/sala/iconos-sala';
 import { useParams, useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
 import { apiRequest, API_URL } from '@/lib/api';
@@ -689,11 +696,11 @@ export default function SalaEnVivoPage() {
   const vistas: Array<{
     id: 'dividida' | 'video' | 'pizarra';
     etiqueta: string;
-    icono: string;
+    icono: React.ReactNode;
   }> = [
-    { id: 'dividida', etiqueta: 'Vista dividida', icono: '▤' },
-    { id: 'video', etiqueta: 'Videollamada', icono: '📹' },
-    { id: 'pizarra', etiqueta: 'Pizarra', icono: '✏️' },
+    { id: 'dividida', etiqueta: 'Vista dividida', icono: <IconoColumnas /> },
+    { id: 'video', etiqueta: 'Videollamada', icono: <IconoVideo /> },
+    { id: 'pizarra', etiqueta: 'Pizarra', icono: <IconoPizarra /> },
   ];
 
   const pestañas: Array<{
@@ -802,7 +809,7 @@ export default function SalaEnVivoPage() {
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-600 sm:px-3">
-              <span aria-hidden="true">⏱</span>
+              <IconoReloj className="h-4 w-4" />
               <span className="tabular-nums">{formatTime(cronometro)}</span>
             </div>
 
@@ -814,7 +821,7 @@ export default function SalaEnVivoPage() {
                 disabled={saliendo}
                 className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
               >
-                <span aria-hidden="true">➜</span>
+                <IconoSalir className="h-4 w-4" />
                 <span>{saliendo ? 'Saliendo…' : 'Abandonar Sala'}</span>
               </button>
             ) : (
@@ -854,7 +861,9 @@ export default function SalaEnVivoPage() {
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                 }`}
               >
-                <span aria-hidden="true">{opcion.icono}</span>
+                <span aria-hidden="true" className="flex items-center">
+                  {opcion.icono}
+                </span>
                 <span>
                   {opcion.id === 'dividida'
                     ? 'Dividida'

@@ -21,6 +21,20 @@ import {
   type PuntoTrazo,
   type TrazoPizarra,
 } from '@/lib/pizarra';
+import {
+  IconoBasura,
+  IconoBorrador,
+  IconoCentrar,
+  IconoDescargar,
+  IconoDeshacer,
+  IconoDibujar,
+  IconoMas,
+  IconoMover,
+  IconoObjetivo,
+  IconoPizarra,
+  IconoRehacer,
+  IconoTexto,
+} from './iconos-sala';
 
 type Props = {
   salaId: string;
@@ -142,6 +156,8 @@ export function Pizarra({
   } | null>(null);
   const espacioRef = useRef(false);
   const cargadoRef = useRef(false);
+  const borrandoRef = useRef(false);
+  const ultimoBorradoRef = useRef(0);
 
   const [cantidad, setCantidad] = useState(0);
   const [herramienta, setHerramienta] = useState<HerramientaPizarra>('dibujar');
@@ -309,6 +325,33 @@ export function Pizarra({
       window.removeEventListener('blur', alSoltarTecla);
     };
   }, []);
+
+  // Rueda del ratón: desplaza el lienzo (Shift para el eje horizontal).
+  useEffect(() => {
+    const contenedor = contenedorRef.current;
+    if (!contenedor) return;
+
+    const alRueda = (evento: WheelEvent) => {
+      // Ctrl + rueda se deja al navegador para el zoom de la página.
+      if (evento.ctrlKey) return;
+
+      evento.preventDefault();
+
+      const unidad = evento.deltaMode === 1 ? 16 : 1;
+      const dx = evento.shiftKey
+        ? -evento.deltaY * unidad
+        : -evento.deltaX * unidad;
+      const dy = evento.shiftKey ? 0 : -evento.deltaY * unidad;
+
+      moverLienzo(
+        desplazamientoRef.current.x + dx,
+        desplazamientoRef.current.y + dy
+      );
+    };
+
+    contenedor.addEventListener('wheel', alRueda, { passive: false });
+    return () => contenedor.removeEventListener('wheel', alRueda);
+  }, [moverLienzo]);
 
   /* ------------------------------------------------------------------ */
   /* Sincronización                                                      */
@@ -636,8 +679,14 @@ export function Pizarra({
     const punto = puntoDeEvento(e);
     setMostrarAyuda(false);
 
-    // Mover el lienzo: herramienta Mover, botón central o barra espaciadora.
-    if (herramienta === 'mover' || espacioRef.current || e.button === 1) {
+    // Mover el lienzo: herramienta Mover, clic derecho, botón central o
+    // barra espaciadora.
+    if (
+      herramienta === 'mover' ||
+      espacioRef.current ||
+      e.button === 1 ||
+      e.button === 2
+    ) {
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       arrastreRef.current = {
@@ -658,6 +707,9 @@ export function Pizarra({
     }
 
     if (herramienta === 'borrar') {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      borrandoRef.current = true;
+      ultimoBorradoRef.current = Date.now();
       borrarEnPunto(punto);
       return;
     }
@@ -697,7 +749,16 @@ export function Pizarra({
       }
     }
 
-    if (!dibujandoRef.current || !actualRef.current) return;
+    if (!dibujandoRef.current || !actualRef.current) {
+      if (borrandoRef.current && herramienta === 'borrar') {
+        const ahora = Date.now();
+        if (ahora - ultimoBorradoRef.current >= 70) {
+          ultimoBorradoRef.current = ahora;
+          borrarEnPunto(punto);
+        }
+      }
+      return;
+    }
 
     const actual = actualRef.current;
     const ultimo = actual.puntos[actual.puntos.length - 1];
@@ -721,6 +782,8 @@ export function Pizarra({
   };
 
   const terminarTrazo = () => {
+    borrandoRef.current = false;
+
     if (arrastreRef.current) {
       arrastreRef.current = null;
       setArrastrando(false);
@@ -889,9 +952,9 @@ export function Pizarra({
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,0.45)]">
       {/* Encabezado */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-base" aria-hidden="true">
-            ✏️
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0B4FC4]/10 text-[#0B4FC4]">
+            <IconoPizarra className="h-4 w-4" />
           </span>
           <div>
             <h2 className="text-sm font-bold text-slate-800">
@@ -946,7 +1009,7 @@ export function Pizarra({
             aria-label="Mover el lienzo"
             aria-pressed={herramienta === 'mover'}
           >
-            <span aria-hidden="true">✋</span>
+            <IconoMover />
             <span className="hidden sm:inline">Mover</span>
           </button>
           <button
@@ -959,8 +1022,10 @@ export function Pizarra({
                 : 'text-slate-500 hover:text-slate-700'
             }`}
             title="Escribir texto"
+            aria-label="Escribir texto"
+            aria-pressed={herramienta === 'texto'}
           >
-            <span aria-hidden="true" className="font-serif text-sm leading-none">T</span>
+            <IconoTexto />
             <span className="hidden sm:inline">Escribir</span>
           </button>
           <button
@@ -973,8 +1038,10 @@ export function Pizarra({
                 : 'text-slate-500 hover:text-slate-700'
             }`}
             title="Dibujar a mano alzada"
+            aria-label="Dibujar a mano alzada"
+            aria-pressed={herramienta === 'dibujar'}
           >
-            <span aria-hidden="true">✎</span>
+            <IconoDibujar />
             <span className="hidden sm:inline">Dibujar</span>
           </button>
           <button
@@ -987,8 +1054,10 @@ export function Pizarra({
                 : 'text-slate-500 hover:text-slate-700'
             }`}
             title="Borrar trazos"
+            aria-label="Borrar trazos"
+            aria-pressed={herramienta === 'borrar'}
           >
-            <span aria-hidden="true">⌫</span>
+            <IconoBorrador />
             <span className="hidden sm:inline">Borrador</span>
           </button>
         </div>
@@ -1000,8 +1069,9 @@ export function Pizarra({
             disabled={!habilitado}
             className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
             title="Deshacer mi último trazo"
+            aria-label="Deshacer mi último trazo"
           >
-            ↺
+            <IconoDeshacer />
           </button>
           <button
             type="button"
@@ -1009,8 +1079,9 @@ export function Pizarra({
             disabled={!habilitado}
             className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
             title="Rehacer"
+            aria-label="Rehacer"
           >
-            ↻
+            <IconoRehacer />
           </button>
         </div>
 
@@ -1064,42 +1135,47 @@ export function Pizarra({
             onClick={() => setMenuAbierto((prev) => !prev)}
             className="rounded-lg px-2 py-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
             title="Más opciones"
+            aria-label="Más opciones"
             aria-expanded={menuAbierto}
           >
-            ⋯
+            <IconoMas />
           </button>
 
           {menuAbierto && (
-            <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+            <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
               <button
                 type="button"
                 onClick={() => {
                   if (centrarEnContenido()) setMenuAbierto(false);
                 }}
-                className="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
               >
+                <IconoObjetivo className="h-3.5 w-3.5" />
                 Ir al contenido
               </button>
               <button
                 type="button"
                 onClick={centrarLienzo}
-                className="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
               >
+                <IconoCentrar className="h-3.5 w-3.5" />
                 Centrar lienzo
               </button>
               <button
                 type="button"
                 onClick={descargarImagen}
-                className="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
               >
+                <IconoDescargar className="h-3.5 w-3.5" />
                 Descargar imagen (PNG)
               </button>
               {esAnfitrion && (
                 <button
                   type="button"
                   onClick={limpiarPizarra}
-                  className="block w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
                 >
+                  <IconoBasura className="h-3.5 w-3.5" />
                   Limpiar pizarra
                 </button>
               )}
@@ -1118,6 +1194,13 @@ export function Pizarra({
       <div
         ref={contenedorRef}
         className="relative min-h-[300px] flex-1 select-none overflow-hidden bg-slate-100 sm:min-h-[220px]"
+        onContextMenu={(e) => {
+          const objetivo = e.target as HTMLElement;
+          if (objetivo.closest('input, textarea, [contenteditable="true"]')) {
+            return;
+          }
+          e.preventDefault();
+        }}
       >
         <canvas
           ref={canvasRef}
@@ -1138,7 +1221,7 @@ export function Pizarra({
           onPointerLeave={alSalir}
           onPointerCancel={alSalir}
           onMouseDown={(e) => {
-            if (e.button === 1) e.preventDefault();
+            if (e.button === 1 || e.button === 2) e.preventDefault();
           }}
           onDragStart={(e) => e.preventDefault()}
           onContextMenu={(e) => e.preventDefault()}
@@ -1266,7 +1349,7 @@ export function Pizarra({
               ? 'Moviendo el lienzo…'
               : herramienta === 'mover'
                 ? 'Arrastra para mover el lienzo'
-                : 'Arrastra con ✋ o mantén Espacio para moverte'}
+                : 'Clic derecho, rueda o Espacio para moverte'}
           </div>
         )}
 
@@ -1295,9 +1378,9 @@ export function Pizarra({
         </span>
         <span className="hidden sm:inline">
           {herramienta === 'mover'
-            ? 'Arrastra para mover el lienzo'
+            ? 'Arrastra o usa la rueda para mover el lienzo'
             : herramienta === 'borrar'
-              ? 'Haz clic sobre un trazo para borrarlo'
+              ? 'Haz clic o arrastra sobre un trazo para borrarlo'
               : herramienta === 'texto'
                 ? 'Haz clic en la pizarra para escribir'
                 : 'Dibuja con el ratón o el dedo'}
