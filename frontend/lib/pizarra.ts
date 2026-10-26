@@ -16,7 +16,11 @@ export type TrazoPizarra = {
   usuarioNombre: string;
 };
 
-export type HerramientaPizarra = 'dibujar' | 'borrar' | 'texto';
+export type HerramientaPizarra = 'dibujar' | 'borrar' | 'texto' | 'mover';
+
+/** Dimensiones del lienzo compartido, en píxeles lógicos. */
+export const LIENZO_ANCHO = 2400;
+export const LIENZO_ALTO = 1600;
 
 export const COLORES_PIZARRA = [
   { nombre: 'Azul', valor: '#1D4ED8' },

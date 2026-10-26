@@ -15,6 +15,8 @@ import {
   GROSOR_POR_DEFECTO,
   colorDeUsuario,
   distanciaASegmento,
+  LIENZO_ALTO,
+  LIENZO_ANCHO,
   type HerramientaPizarra,
   type PuntoTrazo,
   type TrazoPizarra,
@@ -37,10 +39,37 @@ type CursorRemoto = {
   visto: number;
 };
 
-const ANCHO_REFERENCIA = 1200;
+type Desplazamiento = { x: number; y: number };
+type Tamano = { ancho: number; alto: number };
 
-function grosorEscalado(grosor: number, ancho: number): number {
-  return Math.max(1, grosor * Math.max(0.55, ancho / ANCHO_REFERENCIA));
+const MARGEN_BORDE = 56;
+
+function limitarDesplazamiento(
+  x: number,
+  y: number,
+  vista: Tamano
+): Desplazamiento {
+  const eje = (valor: number, tamanoVista: number, tamanoLienzo: number) => {
+    if (tamanoVista <= 0) return valor;
+    if (tamanoVista >= tamanoLienzo) {
+      return (tamanoVista - tamanoLienzo) / 2;
+    }
+    const minimo = tamanoVista - tamanoLienzo - MARGEN_BORDE;
+    const maximo = MARGEN_BORDE;
+    return Math.min(maximo, Math.max(minimo, valor));
+  };
+
+  return {
+    x: eje(x, vista.ancho, LIENZO_ANCHO),
+    y: eje(y, vista.alto, LIENZO_ALTO),
+  };
+}
+
+function cursorConSvg(contenido: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">${contenido}</svg>`;
+  return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    svg
+  )}") 14 14, crosshair`;
 }
 
 function pintarTrazo(
@@ -50,12 +79,13 @@ function pintarTrazo(
   alto: number
 ) {
   const puntos = trazo.datos.puntos ?? [];
+  const escala = ancho / LIENZO_ANCHO;
 
   if (trazo.tipo === 'texto') {
     const texto = trazo.datos.texto ?? '';
     if (!texto) return;
 
-    const tamano = Math.max(14, grosorEscalado(trazo.grosor, ancho) * 5.5);
+    const tamano = Math.max(14, trazo.grosor * 5 * escala);
     ctx.fillStyle = trazo.color;
     ctx.font = `600 ${tamano}px ui-sans-serif, system-ui, sans-serif`;
     ctx.textBaseline = 'middle';
@@ -66,7 +96,7 @@ function pintarTrazo(
   if (puntos.length < 2) return;
 
   ctx.strokeStyle = trazo.color;
-  ctx.lineWidth = grosorEscalado(trazo.grosor, ancho);
+  ctx.lineWidth = Math.max(1, trazo.grosor * escala);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
@@ -102,6 +132,16 @@ export function Pizarra({
   const dibujandoRef = useRef(false);
   const ultimoPreviewRef = useRef(0);
   const ultimoCursorRef = useRef(0);
+  const desplazamientoRef = useRef<Desplazamiento>({ x: 0, y: 0 });
+  const tamanoRef = useRef<Tamano>({ ancho: 0, alto: 0 });
+  const arrastreRef = useRef<{
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+  } | null>(null);
+  const espacioRef = useRef(false);
+  const cargadoRef = useRef(false);
 
   const [cantidad, setCantidad] = useState(0);
   const [herramienta, setHerramienta] = useState<HerramientaPizarra>('dibujar');
@@ -111,6 +151,15 @@ export function Pizarra({
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [cargando, setCargando] = useState(false);
+  const [desplazamiento, setDesplazamiento] = useState<Desplazamiento>({
+    x: 0,
+    y: 0,
+  });
+  const [tamanoVista, setTamanoVista] = useState<Tamano>({ ancho: 0, alto: 0 });
+  const [puntero, setPuntero] = useState<{ x: number; y: number } | null>(null);
+  const [arrastrando, setArrastrando] = useState(false);
+  const [mostrarAyuda, setMostrarAyuda] = useState(true);
+  const [espacio, setEspacio] = useState(false);
   const [textoPendiente, setTextoPendiente] = useState<{
     x: number;
     y: number;
@@ -120,22 +169,37 @@ export function Pizarra({
 
   const miColor = useMemo(() => colorDeUsuario(usuario.id), [usuario.id]);
 
+  const cursorDibujar = useMemo(
+    () =>
+      cursorConSvg(
+        `<g fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"><path d="M14 2v8M14 18v8M2 14h8M18 14h8"/></g>` +
+          `<g fill="none" stroke="#0F172A" stroke-width="2.5" stroke-linecap="round"><path d="M14 2v8M14 18v8M2 14h8M18 14h8"/></g>` +
+          `<circle cx="14" cy="14" r="3.6" fill="${color}" stroke="#ffffff" stroke-width="1.6"/>`
+      ),
+    [color]
+  );
+
+  const cursorBorrar = useMemo(
+    () =>
+      cursorConSvg(
+        `<circle cx="14" cy="14" r="9" fill="rgba(255,255,255,0.75)" stroke="#ffffff" stroke-width="5"/>` +
+          `<circle cx="14" cy="14" r="9" fill="none" stroke="#0F172A" stroke-width="2.5"/>` +
+          `<circle cx="14" cy="14" r="1.6" fill="#0F172A"/>`
+      ),
+    []
+  );
+
   /* ------------------------------------------------------------------ */
   /* Pintado                                                             */
   /* ------------------------------------------------------------------ */
 
   const redibujar = useCallback(() => {
     const canvas = canvasRef.current;
-    const contenedor = contenedorRef.current;
-    if (!canvas || !contenedor) return;
-
-    const ancho = contenedor.clientWidth;
-    const alto = contenedor.clientHeight;
-    if (ancho === 0 || alto === 0) return;
+    if (!canvas) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const anchoFisico = Math.round(ancho * dpr);
-    const altoFisico = Math.round(alto * dpr);
+    const anchoFisico = Math.round(LIENZO_ANCHO * dpr);
+    const altoFisico = Math.round(LIENZO_ALTO * dpr);
 
     if (canvas.width !== anchoFisico || canvas.height !== altoFisico) {
       canvas.width = anchoFisico;
@@ -146,16 +210,16 @@ export function Pizarra({
     if (!ctx) return;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, ancho, alto);
+    ctx.clearRect(0, 0, LIENZO_ANCHO, LIENZO_ALTO);
 
     for (const trazo of trazosRef.current) {
-      pintarTrazo(ctx, trazo, ancho, alto);
+      pintarTrazo(ctx, trazo, LIENZO_ANCHO, LIENZO_ALTO);
     }
 
     previewsRef.current.forEach((preview) => {
       ctx.save();
       ctx.globalAlpha = 0.75;
-      pintarTrazo(ctx, preview, ancho, alto);
+      pintarTrazo(ctx, preview, LIENZO_ANCHO, LIENZO_ALTO);
       ctx.restore();
     });
 
@@ -168,23 +232,83 @@ export function Pizarra({
           grosor: actualRef.current.grosor,
           datos: { puntos: actualRef.current.puntos },
         },
-        ancho,
-        alto
+        LIENZO_ANCHO,
+        LIENZO_ALTO
       );
     }
   }, []);
 
-  useEffect(() => {
+  const moverLienzo = useCallback((x: number, y: number) => {
+    const limitado = limitarDesplazamiento(x, y, tamanoRef.current);
+    desplazamientoRef.current = limitado;
+    setDesplazamiento(limitado);
+  }, []);
+
+  const ajustarVista = useCallback(() => {
+    const contenedor = contenedorRef.current;
+    if (!contenedor) return;
+
+    const ancho = contenedor.clientWidth;
+    const alto = contenedor.clientHeight;
+    if (ancho === 0 || alto === 0) return;
+
+    const primeraVez = tamanoRef.current.ancho === 0;
+    tamanoRef.current = { ancho, alto };
+    setTamanoVista({ ancho, alto });
+
+    const base = primeraVez
+      ? { x: (ancho - LIENZO_ANCHO) / 2, y: (alto - LIENZO_ALTO) / 2 }
+      : desplazamientoRef.current;
+
+    moverLienzo(base.x, base.y);
     redibujar();
+  }, [moverLienzo, redibujar]);
+
+  useEffect(() => {
+    ajustarVista();
 
     const contenedor = contenedorRef.current;
     if (!contenedor) return;
 
-    const observador = new ResizeObserver(() => redibujar());
+    const observador = new ResizeObserver(() => ajustarVista());
     observador.observe(contenedor);
 
     return () => observador.disconnect();
-  }, [redibujar]);
+  }, [ajustarVista]);
+
+  // Barra espaciadora: mover el lienzo sin cambiar de herramienta.
+  useEffect(() => {
+    const esCampo = (target: EventTarget | null) =>
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      (target instanceof HTMLElement && target.isContentEditable);
+
+    const alBajar = (evento: KeyboardEvent) => {
+      if (evento.code !== 'Space' || esCampo(evento.target)) return;
+      evento.preventDefault();
+      espacioRef.current = true;
+      setEspacio(true);
+    };
+
+    const alSoltarTecla = () => {
+      espacioRef.current = false;
+      setEspacio(false);
+    };
+
+    const alSubir = (evento: KeyboardEvent) => {
+      if (evento.code === 'Space') alSoltarTecla();
+    };
+
+    window.addEventListener('keydown', alBajar);
+    window.addEventListener('keyup', alSubir);
+    window.addEventListener('blur', alSoltarTecla);
+
+    return () => {
+      window.removeEventListener('keydown', alBajar);
+      window.removeEventListener('keyup', alSubir);
+      window.removeEventListener('blur', alSoltarTecla);
+    };
+  }, []);
 
   /* ------------------------------------------------------------------ */
   /* Sincronización                                                      */
@@ -214,6 +338,7 @@ export function Pizarra({
           : [];
         previewsRef.current.clear();
         redoRef.current = [];
+        cargadoRef.current = true;
         setCantidad(trazosRef.current.length);
         setError('');
         redibujar();
@@ -467,12 +592,15 @@ export function Pizarra({
     };
   };
 
-  const borrarEnPunto = (punto: PuntoTrazo) => {
-    const contenedor = contenedorRef.current;
-    if (!contenedor) return;
+  const posicionEnVista = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = contenedorRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
 
-    const ancho = contenedor.clientWidth;
-    const alto = contenedor.clientHeight;
+  const borrarEnPunto = (punto: PuntoTrazo) => {
+    const ancho = LIENZO_ANCHO;
+    const alto = LIENZO_ALTO;
     const umbral = 10;
 
     const ids = trazosRef.current
@@ -505,9 +633,24 @@ export function Pizarra({
   };
 
   const alPresionar = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!participando) return;
-
     const punto = puntoDeEvento(e);
+    setMostrarAyuda(false);
+
+    // Mover el lienzo: herramienta Mover, botón central o barra espaciadora.
+    if (herramienta === 'mover' || espacioRef.current || e.button === 1) {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      arrastreRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        dx: desplazamientoRef.current.x,
+        dy: desplazamientoRef.current.y,
+      };
+      setArrastrando(true);
+      return;
+    }
+
+    if (!participando) return;
 
     if (herramienta === 'texto') {
       setTextoPendiente({ x: punto.x, y: punto.y, valor: '' });
@@ -526,6 +669,17 @@ export function Pizarra({
   };
 
   const alMover = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!arrastreRef.current && !dibujandoRef.current) {
+      setPuntero(posicionEnVista(e));
+    }
+
+    if (arrastreRef.current) {
+      const dx = e.clientX - arrastreRef.current.x;
+      const dy = e.clientY - arrastreRef.current.y;
+      moverLienzo(arrastreRef.current.dx + dx, arrastreRef.current.dy + dy);
+      return;
+    }
+
     if (!participando) return;
 
     const punto = puntoDeEvento(e);
@@ -567,6 +721,12 @@ export function Pizarra({
   };
 
   const terminarTrazo = () => {
+    if (arrastreRef.current) {
+      arrastreRef.current = null;
+      setArrastrando(false);
+      return;
+    }
+
     if (!dibujandoRef.current || !actualRef.current) return;
 
     const actual = actualRef.current;
@@ -584,6 +744,65 @@ export function Pizarra({
 
     redibujar();
   };
+
+  const alSalir = () => {
+    setPuntero(null);
+    terminarTrazo();
+  };
+
+  const centrarLienzo = useCallback(() => {
+    const { ancho, alto } = tamanoRef.current;
+    moverLienzo((ancho - LIENZO_ANCHO) / 2, (alto - LIENZO_ALTO) / 2);
+    setMenuAbierto(false);
+  }, [moverLienzo]);
+
+  /** Lleva la vista al centro de los trazos existentes. */
+  const centrarEnContenido = useCallback(() => {
+    const { ancho, alto } = tamanoRef.current;
+    if (ancho === 0 || alto === 0) return false;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    const sumar = (x: number, y: number) => {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    };
+
+    for (const trazo of trazosRef.current) {
+      if (trazo.tipo === 'texto') {
+        sumar((trazo.datos.x ?? 0) * LIENZO_ANCHO, (trazo.datos.y ?? 0) * LIENZO_ALTO);
+        continue;
+      }
+
+      for (const punto of trazo.datos.puntos ?? []) {
+        sumar(punto.x * LIENZO_ANCHO, punto.y * LIENZO_ALTO);
+      }
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return false;
+
+    moverLienzo(
+      ancho / 2 - (minX + maxX) / 2,
+      alto / 2 - (minY + maxY) / 2
+    );
+    return true;
+  }, [moverLienzo]);
+
+  // Al entrar con contenido ya guardado, mostrar los trazos en lugar de un
+  // centro vacío del lienzo (útil en pantallas pequeñas).
+  const ajusteInicialRef = useRef(false);
+  useEffect(() => {
+    if (ajusteInicialRef.current || !cargadoRef.current) return;
+    if (tamanoVista.ancho === 0) return;
+
+    ajusteInicialRef.current = true;
+    if (cantidad > 0) centrarEnContenido();
+  }, [cantidad, tamanoVista.ancho, centrarEnContenido]);
 
   const confirmarTexto = () => {
     if (!textoPendiente) return;
@@ -610,11 +829,8 @@ export function Pizarra({
   /* ------------------------------------------------------------------ */
 
   const descargarImagen = () => {
-    const contenedor = contenedorRef.current;
-    if (!contenedor) return;
-
-    const ancho = 1600;
-    const alto = Math.round((contenedor.clientHeight / contenedor.clientWidth) * ancho);
+    const ancho = 2000;
+    const alto = Math.round((LIENZO_ALTO / LIENZO_ANCHO) * ancho);
 
     const lienzo = document.createElement('canvas');
     lienzo.width = ancho;
@@ -638,6 +854,36 @@ export function Pizarra({
   };
 
   const habilitado = participando && conexionLista;
+  const cursorLienzo =
+    !habilitado && herramienta !== 'mover'
+      ? 'not-allowed'
+      : arrastrando
+        ? 'grabbing'
+        : herramienta === 'mover' || espacio
+          ? 'grab'
+          : herramienta === 'texto'
+            ? 'text'
+            : herramienta === 'borrar'
+              ? cursorBorrar
+              : cursorDibujar;
+
+  const posicionTexto = textoPendiente
+    ? {
+        left: Math.min(
+          Math.max(8, textoPendiente.x * LIENZO_ANCHO + desplazamiento.x),
+          Math.max(8, tamanoVista.ancho - 250)
+        ),
+        top: Math.min(
+          Math.max(8, textoPendiente.y * LIENZO_ALTO + desplazamiento.y),
+          Math.max(8, tamanoVista.alto - 46)
+        ),
+      }
+    : null;
+
+  const avanceX = (tamanoVista.ancho / LIENZO_ANCHO) * 100;
+  const avanceY = (tamanoVista.alto / LIENZO_ALTO) * 100;
+  const posicionMiniX = (-desplazamiento.x / LIENZO_ANCHO) * 100;
+  const posicionMiniY = (-desplazamiento.y / LIENZO_ALTO) * 100;
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,0.45)]">
@@ -688,6 +934,21 @@ export function Pizarra({
       {/* Barra de herramientas */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2">
         <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setHerramienta('mover')}
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+              herramienta === 'mover'
+                ? 'bg-white text-[#0B4FC4] shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+            title="Mover el lienzo"
+            aria-label="Mover el lienzo"
+            aria-pressed={herramienta === 'mover'}
+          >
+            <span aria-hidden="true">✋</span>
+            <span className="hidden sm:inline">Mover</span>
+          </button>
           <button
             type="button"
             onClick={() => setHerramienta('texto')}
@@ -812,6 +1073,22 @@ export function Pizarra({
             <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
               <button
                 type="button"
+                onClick={() => {
+                  if (centrarEnContenido()) setMenuAbierto(false);
+                }}
+                className="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Ir al contenido
+              </button>
+              <button
+                type="button"
+                onClick={centrarLienzo}
+                className="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Centrar lienzo
+              </button>
+              <button
+                type="button"
                 onClick={descargarImagen}
                 className="block w-full px-3 py-2 text-left text-xs text-slate-600 hover:bg-slate-50"
               >
@@ -840,40 +1117,59 @@ export function Pizarra({
       {/* Lienzo */}
       <div
         ref={contenedorRef}
-        className="relative min-h-[220px] flex-1 overflow-hidden bg-white"
-        style={{
-          backgroundColor: '#FFFFFF',
-          backgroundImage:
-            'linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)',
-          backgroundSize: '28px 28px',
-        }}
+        className="relative min-h-[300px] flex-1 select-none overflow-hidden bg-slate-100 sm:min-h-[220px]"
       >
         <canvas
           ref={canvasRef}
-          className={`absolute inset-0 h-full w-full touch-none ${
-            habilitado
-              ? herramienta === 'texto'
-                ? 'cursor-text'
-                : herramienta === 'borrar'
-                  ? 'cursor-cell'
-                  : 'cursor-crosshair'
-              : 'cursor-not-allowed'
-          }`}
+          className="absolute left-0 top-0 touch-none bg-white shadow-[0_0_0_1px_rgba(148,163,184,0.35)]"
+          style={{
+            width: LIENZO_ANCHO,
+            height: LIENZO_ALTO,
+            transform: `translate3d(${desplazamiento.x}px, ${desplazamiento.y}px, 0)`,
+            cursor: cursorLienzo,
+            backgroundImage:
+              'linear-gradient(to right, rgba(148,163,184,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.16) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+            willChange: 'transform',
+          }}
           onPointerDown={alPresionar}
           onPointerMove={alMover}
           onPointerUp={terminarTrazo}
-          onPointerLeave={terminarTrazo}
-          onPointerCancel={terminarTrazo}
+          onPointerLeave={alSalir}
+          onPointerCancel={alSalir}
+          onMouseDown={(e) => {
+            if (e.button === 1) e.preventDefault();
+          }}
+          onDragStart={(e) => e.preventDefault()}
+          onContextMenu={(e) => e.preventDefault()}
         />
 
-        {/* Cursor remoto */}
+        {/* Cursor propio: halo de alto contraste sobre el lienzo */}
+        {puntero && !arrastrando && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2"
+            style={{ left: puntero.x, top: puntero.y }}
+            aria-hidden="true"
+          >
+            <span
+              className="block h-5 w-5 rounded-full"
+              style={{
+                border: `2px solid ${miColor}`,
+                boxShadow:
+                  '0 0 0 2px #ffffff, 0 0 10px rgba(15,23,42,0.35)',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Cursores remotos */}
         {Object.entries(cursores).map(([id, cursor]) => (
           <div
             key={id}
-            className="pointer-events-none absolute z-10 transition-transform duration-75"
+            className="pointer-events-none absolute z-10"
             style={{
-              left: `${cursor.x * 100}%`,
-              top: `${cursor.y * 100}%`,
+              left: cursor.x * LIENZO_ANCHO + desplazamiento.x,
+              top: cursor.y * LIENZO_ALTO + desplazamiento.y,
               transform: 'translate(-2px, -2px)',
             }}
           >
@@ -895,13 +1191,10 @@ export function Pizarra({
         ))}
 
         {/* Entrada de texto */}
-        {textoPendiente && (
+        {textoPendiente && posicionTexto && (
           <div
             className="absolute z-20 flex items-center gap-1 rounded-lg border-2 border-[#0B4FC4] bg-white p-1 shadow-lg"
-            style={{
-              left: `min(calc(${textoPendiente.x * 100}% - 12px), calc(100% - 15rem))`,
-              top: `min(${textoPendiente.y * 100}%, calc(100% - 3rem))`,
-            }}
+            style={posicionTexto}
           >
             <input
               autoFocus
@@ -939,13 +1232,52 @@ export function Pizarra({
           </div>
         )}
 
+        {/* Minimapa: indica qué parte del lienzo se está viendo */}
+        {tamanoVista.ancho > 0 && (
+          <div className="pointer-events-none absolute bottom-3 right-3 z-10 hidden sm:block">
+            <div className="relative h-[72px] w-[108px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div
+                className="absolute inset-0 opacity-70"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(to right, rgba(148,163,184,0.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.25) 1px, transparent 1px)',
+                  backgroundSize: '9px 9px',
+                }}
+              />
+              <div
+                className="absolute rounded-[2px] border border-[#0B4FC4] bg-[#0B4FC4]/15"
+                style={{
+                  left: `${posicionMiniX}%`,
+                  top: `${posicionMiniY}%`,
+                  width: `${avanceX}%`,
+                  height: `${avanceY}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1 text-center text-[9px] font-semibold text-slate-400">
+              Vista del lienzo
+            </p>
+          </div>
+        )}
+
+        {(mostrarAyuda || arrastrando) && (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-full bg-slate-900/80 px-3 py-1.5 text-[10px] font-semibold text-white shadow-sm">
+            {arrastrando
+              ? 'Moviendo el lienzo…'
+              : herramienta === 'mover'
+                ? 'Arrastra para mover el lienzo'
+                : 'Arrastra con ✋ o mantén Espacio para moverte'}
+          </div>
+        )}
+
         {!participando && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-white/80 px-6 text-center backdrop-blur-[1px]">
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 bg-white/80 px-6 text-center backdrop-blur-[1px]">
             <p className="text-sm font-bold text-slate-700">
               Únete a la sala para dibujar
             </p>
             <p className="text-xs text-slate-500">
-              La pizarra se comparte solo con los participantes activos.
+              Puedes mover el lienzo para explorarlo; para escribir, únete a la
+              sala.
             </p>
           </div>
         )}
@@ -962,11 +1294,13 @@ export function Pizarra({
           {habilitado ? 'Historial guardado · sincronización en vivo' : 'Sin conexión'}
         </span>
         <span className="hidden sm:inline">
-          {herramienta === 'borrar'
-            ? 'Haz clic sobre un trazo para borrarlo'
-            : herramienta === 'texto'
-              ? 'Haz clic en la pizarra para escribir'
-              : 'Dibuja con el ratón o el dedo'}
+          {herramienta === 'mover'
+            ? 'Arrastra para mover el lienzo'
+            : herramienta === 'borrar'
+              ? 'Haz clic sobre un trazo para borrarlo'
+              : herramienta === 'texto'
+                ? 'Haz clic en la pizarra para escribir'
+                : 'Dibuja con el ratón o el dedo'}
         </span>
       </div>
     </section>
