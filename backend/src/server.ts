@@ -15,6 +15,7 @@ import {
   authMiddleware,
   rateLimitMiddleware,
 } from './shared/middleware';
+import { AVATARES_DIR } from './shared/uploads';
 
 if (!process.env.JWT_SECRET) {
   console.error(
@@ -63,6 +64,9 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Fotos de perfil (públicas). Los materiales NO se exponen aquí.
+app.use('/avatares', express.static(AVATARES_DIR, { maxAge: '7d' }));
 
 // ---------------------------------------------------------
 // Autenticación

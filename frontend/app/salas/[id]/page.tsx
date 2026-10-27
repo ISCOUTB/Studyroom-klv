@@ -112,6 +112,7 @@ export default function SalaEnVivoPage() {
   const [cargandoMateriales, setCargandoMateriales] = useState(false);
   const [errorMateriales, setErrorMateriales] = useState('');
   const [archivoSeleccionado, setArchivoSeleccionado] = useState<File | null>(null);
+  const [arrastrandoArchivo, setArrastrandoArchivo] = useState(false);
   const [descripcionMaterial, setDescripcionMaterial] = useState('');
   const [subiendoMaterial, setSubiendoMaterial] = useState(false);
   const [descargandoMaterialId, setDescargandoMaterialId] = useState<string | null>(
@@ -481,15 +482,13 @@ export default function SalaEnVivoPage() {
   const limpiarArchivo = () => {
     setArchivoSeleccionado(null);
     setDescripcionMaterial('');
+    setArrastrandoArchivo(false);
     if (materialInputRef.current) {
       materialInputRef.current.value = '';
     }
   };
 
-  const handleSeleccionarArchivo = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const archivo = e.target.files?.[0] ?? null;
+  const seleccionarArchivo = (archivo: File | null) => {
     setErrorMateriales('');
 
     if (!archivo) {
@@ -500,7 +499,9 @@ export default function SalaEnVivoPage() {
     const extension = extensionDe(archivo.name);
     if (!(EXTENSIONES_MATERIALES as readonly string[]).includes(extension)) {
       setArchivoSeleccionado(null);
-      e.target.value = '';
+      if (materialInputRef.current) {
+        materialInputRef.current.value = '';
+      }
       setErrorMateriales(
         'Formato no permitido. Puedes subir PDF, documentos, presentaciones, hojas de cálculo, texto o imágenes JPG, PNG o WEBP.'
       );
@@ -509,12 +510,39 @@ export default function SalaEnVivoPage() {
 
     if (archivo.size > MAX_MATERIAL_BYTES) {
       setArchivoSeleccionado(null);
-      e.target.value = '';
+      if (materialInputRef.current) {
+        materialInputRef.current.value = '';
+      }
       setErrorMateriales('El archivo supera el límite de 10 MB.');
       return;
     }
 
     setArchivoSeleccionado(archivo);
+  };
+
+  const handleSeleccionarArchivo = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    seleccionarArchivo(e.target.files?.[0] ?? null);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (subiendoMaterial) return;
+    setArrastrandoArchivo(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setArrastrandoArchivo(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setArrastrandoArchivo(false);
+    if (subiendoMaterial) return;
+    seleccionarArchivo(e.dataTransfer.files?.[0] ?? null);
   };
 
   const handleSubirMaterial = async (e: React.FormEvent) => {
@@ -684,7 +712,7 @@ export default function SalaEnVivoPage() {
     : !sala.participando
       ? {
           color: 'bg-slate-400',
-          texto: 'Únete a la sala para usar el chat y la pizarra',
+          texto: 'Únete a la sala para usar la mensajería y la pizarra',
         }
       : conectadoChat
         ? {
@@ -708,7 +736,7 @@ export default function SalaEnVivoPage() {
     etiqueta: string;
     contador: number;
   }> = [
-    { id: 'chat', etiqueta: 'Chat', contador: mensajes.length },
+    { id: 'chat', etiqueta: 'Mensajes', contador: mensajes.length },
     { id: 'participantes', etiqueta: 'Participantes', contador: participantes.length },
     { id: 'materiales', etiqueta: 'Materiales', contador: materiales.length },
   ];
@@ -868,7 +896,7 @@ export default function SalaEnVivoPage() {
                   {opcion.id === 'dividida'
                     ? 'Dividida'
                     : opcion.id === 'video'
-                      ? 'Video'
+                      ? 'Videollamada'
                       : 'Pizarra'}
                 </span>
               </button>
@@ -1090,7 +1118,7 @@ export default function SalaEnVivoPage() {
                 />
               </div>
               <p className="text-[11px] text-slate-400">
-                Chat, participantes y materiales en tiempo real
+                Mensajes, participantes y materiales en tiempo real
               </p>
             </div>
 
@@ -1124,7 +1152,7 @@ export default function SalaEnVivoPage() {
               </div>
             </div>
 
-            {/* Chat */}
+            {/* Mensajería */}
             {activeTab === 'chat' && (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 text-[10px] text-slate-400">
@@ -1338,16 +1366,6 @@ export default function SalaEnVivoPage() {
                         }`
                       : 'Solo participantes'}
                   </span>
-                  {sala.participando && (
-                    <button
-                      type="button"
-                      onClick={() => materialInputRef.current?.click()}
-                      disabled={subiendoMaterial}
-                      className="rounded-lg bg-[#0B4FC4] px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      + Subir archivo
-                    </button>
-                  )}
                 </div>
 
                 {!sala.participando ? (
@@ -1441,20 +1459,46 @@ export default function SalaEnVivoPage() {
                           </div>
                         </>
                       ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => materialInputRef.current?.click()}
-                            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500 transition-colors hover:border-[#0B4FC4] hover:text-[#0B4FC4]"
-                          >
-                            <span aria-hidden="true">📎</span>
-                            <span>Subir archivo</span>
-                          </button>
-                          <p className="text-center text-[10px] leading-relaxed text-slate-400">
+                        <div
+                          role="button"
+                          tabIndex={subiendoMaterial ? -1 : 0}
+                          aria-label="Arrastrar o elegir archivo de material"
+                          onClick={() => {
+                            if (subiendoMaterial) return;
+                            materialInputRef.current?.click();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return;
+                            e.preventDefault();
+                            if (subiendoMaterial) return;
+                            materialInputRef.current?.click();
+                          }}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          className={`w-full cursor-pointer rounded-xl border border-dashed px-3 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B4FC4] ${
+                            arrastrandoArchivo
+                              ? 'border-[#0B4FC4] bg-blue-50'
+                              : 'border-slate-300 bg-slate-50 hover:border-[#0B4FC4] hover:bg-blue-50/40'
+                          } ${
+                            subiendoMaterial
+                              ? 'cursor-not-allowed opacity-60'
+                              : ''
+                          }`}
+                        >
+                          <span className="block text-lg">
+                            {arrastrandoArchivo ? '📥' : '📎'}
+                          </span>
+                          <span className="mt-1 block text-[11px] font-semibold text-slate-600">
+                            {arrastrandoArchivo
+                              ? 'Suelta el archivo aquí'
+                              : 'Arrastra un archivo o haz clic aquí'}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-400">
                             PDF, documentos, presentaciones, hojas de cálculo,
                             texto o imágenes · máx. 10 MB
-                          </p>
-                        </>
+                          </span>
+                        </div>
                       )}
                     </form>
 

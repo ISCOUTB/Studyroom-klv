@@ -977,7 +977,7 @@ export function Videollamada({
         </div>
 
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 text-[11px] leading-relaxed text-slate-500">
-          La pizarra, el chat y los materiales siguen disponibles mientras
+          La pizarra, la mensajería y los materiales siguen disponibles mientras
           hablas con tu grupo.
         </div>
       </section>
