@@ -9,6 +9,101 @@ export const ASIGNATURAS = [
 export type Asignatura = (typeof ASIGNATURAS)[number];
 export type EstadoSala = 'Activa' | 'Programada' | 'Finalizada';
 
+export interface ColorMateria {
+  punto: string;
+  franja: string;
+  chip: string;
+  texto: string;
+  suave: string;
+  borde: string;
+}
+
+export const COLORES_MATERIA: Record<string, ColorMateria> = {
+  'Cálculo I': {
+    punto: 'bg-blue-600',
+    franja: 'bg-blue-600',
+    chip: 'bg-blue-50 text-blue-700 border-blue-200',
+    texto: 'text-blue-700',
+    suave: 'bg-blue-50',
+    borde: 'border-blue-200',
+  },
+  'Física I': {
+    punto: 'bg-emerald-500',
+    franja: 'bg-emerald-500',
+    chip: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    texto: 'text-emerald-700',
+    suave: 'bg-emerald-50',
+    borde: 'border-emerald-200',
+  },
+  'Álgebra Lineal': {
+    punto: 'bg-amber-500',
+    franja: 'bg-amber-400',
+    chip: 'bg-amber-50 text-amber-700 border-amber-200',
+    texto: 'text-amber-700',
+    suave: 'bg-amber-50',
+    borde: 'border-amber-200',
+  },
+  Estadística: {
+    punto: 'bg-rose-500',
+    franja: 'bg-rose-500',
+    chip: 'bg-rose-50 text-rose-700 border-rose-200',
+    texto: 'text-rose-700',
+    suave: 'bg-rose-50',
+    borde: 'border-rose-200',
+  },
+  'Cálculo Integral': {
+    punto: 'bg-violet-500',
+    franja: 'bg-violet-500',
+    chip: 'bg-violet-50 text-violet-700 border-violet-200',
+    texto: 'text-violet-700',
+    suave: 'bg-violet-50',
+    borde: 'border-violet-200',
+  },
+};
+
+const COLOR_POR_DEFECTO: ColorMateria = {
+  punto: 'bg-slate-400',
+  franja: 'bg-slate-400',
+  chip: 'bg-slate-100 text-slate-600 border-slate-200',
+  texto: 'text-slate-600',
+  suave: 'bg-slate-50',
+  borde: 'border-slate-200',
+};
+
+export function colorDeMateria(asignatura: string): ColorMateria {
+  return COLORES_MATERIA[asignatura] ?? COLOR_POR_DEFECTO;
+}
+
+/** "2026-10-28T14:26:00.000Z" -> "mié, 28 de oct, 2:26 p. m." */
+export function formatearFechaProgramada(iso: string | null): string {
+  if (!iso) return '';
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return '';
+
+  const partes = new Intl.DateTimeFormat('es-CO', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(fecha);
+
+  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((parte) => parte.type === tipo)?.value ?? '';
+
+  const diaSemana = valor('weekday').replace('.', '');
+  const dia = valor('day');
+  const mes = valor('month').replace('.', '');
+  const hora = valor('hour');
+  const minuto = valor('minute');
+  const periodo = valor('dayPeriod');
+
+  return `${diaSemana}, ${dia} de ${mes}, ${hora}:${minuto} ${periodo}`
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export interface AnfitrionSala {
   id: string;
   nombre: string;
@@ -33,6 +128,8 @@ export interface Sala {
   cupoMaximo: number;
   estado: EstadoSala;
   privacidad: 'Pública' | 'Privada' | string;
+  programadaEn?: string | null;
+  codigoAcceso?: string | null;
   creadoEn: string;
   esAnfitrion: boolean;
   participando: boolean;

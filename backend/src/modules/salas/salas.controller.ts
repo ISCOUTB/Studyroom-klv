@@ -1,4 +1,6 @@
-import { Request, Response } from 'express';
+import { randomInt } from 'crypto';
+import { Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 import { esParticipanteActivo, listarMensajesSala } from './chat.service';
@@ -24,12 +26,50 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   FINALIZADA: 'Finalizada',
 };
 
+const PRIVACIDADES_CREACION: Record<string, 'PUBLICA' | 'PRIVADA'> = {
+  publica: 'PUBLICA',
+  pública: 'PUBLICA',
+  privada: 'PRIVADA',
+};
+
+const CARACTERES_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
 function text(value: unknown): string {
   return String(value ?? '').trim();
 }
 
 function estadoParaCrear(value: unknown): 'ACTIVA' | 'PROGRAMADA' | null {
   return ESTADOS_CREACION[text(value).toLowerCase()] ?? null;
+}
+
+function privacidadParaCrear(
+  value: unknown
+): 'PUBLICA' | 'PRIVADA' | null {
+  return PRIVACIDADES_CREACION[text(value).toLowerCase()] ?? null;
+}
+
+function normalizarCodigo(value: unknown): string {
+  return text(value).toUpperCase().replace(/\s+/g, '');
+}
+
+function generarCodigo(): string {
+  return Array.from(
+    { length: 6 },
+    () => CARACTERES_CODIGO[randomInt(CARACTERES_CODIGO.length)]
+  ).join('');
+}
+
+async function generarCodigoUnico(): Promise<string> {
+  for (let intento = 0; intento < 12; intento += 1) {
+    const codigo = generarCodigo();
+    const existente = await prisma.salaEstudio.findUnique({
+      where: { codigoAcceso: codigo },
+      select: { id: true },
+    });
+    if (!existente) return codigo;
+  }
+
+  throw new Error('No se pudo generar un código de acceso único.');
 }
 
 type UsuarioResumen = {
@@ -55,6 +95,8 @@ type SalaConRelaciones = {
   cupoMaximo: number;
   privacidad: string;
   estado: string;
+  programadaEn: Date | null;
+  codigoAcceso: string | null;
   creadoEn: Date;
   anfitrion: UsuarioResumen;
   participantes?: ParticipacionSala[];
@@ -64,6 +106,10 @@ function serializarSala(sala: SalaConRelaciones, usuarioId: string, detalle = fa
   const participantesActivos = (sala.participantes ?? []).filter(
     (participacion) => participacion.estado === 'ACTIVO'
   );
+  const participando = participantesActivos.some(
+    (participacion) => participacion.usuarioId === usuarioId
+  );
+  const esAnfitrion = sala.anfitrionId === usuarioId;
 
   const respuesta: Record<string, unknown> = {
     id: sala.id,
@@ -79,11 +125,11 @@ function serializarSala(sala: SalaConRelaciones, usuarioId: string, detalle = fa
     cupoMaximo: sala.cupoMaximo,
     estado: ETIQUETA_ESTADO[sala.estado] ?? 'Activa',
     privacidad: sala.privacidad === 'PRIVADA' ? 'Privada' : 'Pública',
+    programadaEn: sala.programadaEn ? sala.programadaEn.toISOString() : null,
+    codigoAcceso: esAnfitrion || participando ? sala.codigoAcceso : null,
     creadoEn: sala.creadoEn,
-    esAnfitrion: sala.anfitrionId === usuarioId,
-    participando: participantesActivos.some(
-      (participacion) => participacion.usuarioId === usuarioId
-    ),
+    esAnfitrion,
+    participando,
   };
 
   if (detalle) {
@@ -108,8 +154,31 @@ export const listarSalas = async (req: AuthRequest, res: Response) => {
   }
 
   try {
+    const codigo = normalizarCodigo(
+      req.query.codigo ?? req.query.codigoAcceso
+    );
+
+    // Las salas privadas solo se listan para su anfitrión, sus participantes
+    // activos o para quien consulte con el código de acceso.
+    const condiciones: Prisma.SalaEstudioWhereInput[] = [
+      { privacidad: 'PUBLICA' },
+      { anfitrionId: req.user.id },
+      {
+        participantes: {
+          some: { usuarioId: req.user.id, estado: 'ACTIVO' },
+        },
+      },
+    ];
+    if (codigo) {
+      condiciones.push({ codigoAcceso: codigo });
+    }
+
+    const where: Prisma.SalaEstudioWhereInput = codigo
+      ? { estado: { in: ESTADOS_VISIBLES }, codigoAcceso: codigo }
+      : { estado: { in: ESTADOS_VISIBLES }, OR: condiciones };
+
     const salas = await prisma.salaEstudio.findMany({
-      where: { estado: { in: ESTADOS_VISIBLES } },
+      where,
       orderBy: [{ estado: 'asc' }, { creadoEn: 'desc' }],
       include: {
         anfitrion: { select: { id: true, nombre: true, rol: true } },
@@ -142,7 +211,12 @@ export const crearSala = async (req: AuthRequest, res: Response) => {
   const tema = text(req.body?.tema);
   const descripcion = text(req.body?.descripcion);
   const estado = estadoParaCrear(req.body?.estado ?? 'Activa');
+  const privacidad = privacidadParaCrear(
+    req.body?.privacidad ?? 'Pública'
+  );
   const cupoMaximo = Number(req.body?.cupoMaximo ?? 10);
+  const programadaEnTexto = text(req.body?.programadaEn);
+  let programadaEn: Date | null = null;
 
   if (titulo.length < 3 || titulo.length > 100) {
     return res.status(400).json({
@@ -169,13 +243,36 @@ export const crearSala = async (req: AuthRequest, res: Response) => {
       error: 'El estado debe ser Activa o Programada.',
     });
   }
+  if (!privacidad) {
+    return res.status(400).json({
+      error: 'La privacidad debe ser Pública o Privada.',
+    });
+  }
   if (!Number.isInteger(cupoMaximo) || cupoMaximo < 2 || cupoMaximo > 50) {
     return res.status(400).json({
       error: 'El cupo máximo debe estar entre 2 y 50 participantes.',
     });
   }
 
+  if (estado === 'PROGRAMADA') {
+    programadaEn = new Date(programadaEnTexto);
+
+    if (!programadaEnTexto || Number.isNaN(programadaEn.getTime())) {
+      return res.status(400).json({
+        error: 'Selecciona la fecha y la hora de la sala programada.',
+      });
+    }
+    if (programadaEn.getTime() <= Date.now()) {
+      return res.status(400).json({
+        error: 'La fecha y la hora de la sala deben ser futuras.',
+      });
+    }
+  }
+
   try {
+    const codigoAcceso =
+      privacidad === 'PRIVADA' ? await generarCodigoUnico() : null;
+
     const sala = await prisma.salaEstudio.create({
       data: {
         anfitrionId: req.user.id,
@@ -185,6 +282,9 @@ export const crearSala = async (req: AuthRequest, res: Response) => {
         descripcion,
         cupoMaximo,
         estado,
+        privacidad,
+        programadaEn,
+        codigoAcceso,
         // El anfitrión cuenta como primer participante de la sala.
         participantes: {
           create: { usuarioId: req.user.id },
@@ -293,7 +393,15 @@ export const unirseSala = async (req: AuthRequest, res: Response) => {
   try {
     const sala = await prisma.salaEstudio.findUnique({
       where: { id: salaId },
-      select: { id: true, estado: true, cupoMaximo: true },
+      select: {
+        id: true,
+        estado: true,
+        cupoMaximo: true,
+        privacidad: true,
+        codigoAcceso: true,
+        anfitrionId: true,
+        programadaEn: true,
+      },
     });
 
     if (!sala) {
@@ -302,6 +410,15 @@ export const unirseSala = async (req: AuthRequest, res: Response) => {
     if (sala.estado === 'FINALIZADA') {
       return res.status(400).json({ error: 'Esta sala ya finalizó.' });
     }
+    if (
+      sala.estado === 'PROGRAMADA' &&
+      sala.programadaEn &&
+      sala.programadaEn.getTime() > Date.now()
+    ) {
+      return res.status(400).json({
+        error: 'La sala aún no ha comenzado. Inténtalo a la hora programada.',
+      });
+    }
 
     const participacion = await prisma.participacionSala.findUnique({
       where: { salaId_usuarioId: { salaId, usuarioId: req.user.id } },
@@ -309,6 +426,20 @@ export const unirseSala = async (req: AuthRequest, res: Response) => {
 
     if (participacion?.estado === 'ACTIVO') {
       return res.json({ message: 'Ya estabas dentro de la sala.' });
+    }
+
+    if (sala.privacidad === 'PRIVADA' && sala.anfitrionId !== req.user.id) {
+      const codigo = normalizarCodigo(req.body?.codigoAcceso);
+      if (!codigo) {
+        return res.status(403).json({
+          error: 'Esta sala es privada. Ingresa el código de acceso.',
+        });
+      }
+      if (codigo !== sala.codigoAcceso) {
+        return res.status(403).json({
+          error: 'El código de acceso no es correcto. Verifícalo e inténtalo de nuevo.',
+        });
+      }
     }
 
     const participantesActivos = await prisma.participacionSala.count({

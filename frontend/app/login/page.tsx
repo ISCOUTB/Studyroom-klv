@@ -156,7 +156,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(correoNormalizado, password);
-      router.push('/salas');
+      router.push('/inicio');
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');
     } finally {
@@ -238,7 +238,7 @@ export default function LoginPage() {
             Plataforma académica
           </p>
           <h1 className="mt-1 text-[22px] font-extrabold leading-tight tracking-tight text-[#0758C9] sm:text-[26px]">
-            Campus Collaborative Study
+            StudyRoom
           </h1>
           <div className="mt-2 h-[3px] w-[60px] rounded-full bg-[#0758C9]" />
         </header>

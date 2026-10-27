@@ -6,7 +6,7 @@ export const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(
 );
 
 const EMAIL_FROM =
-  process.env.EMAIL_FROM || 'Campus Collaborative Study <noreply@utb.edu.co>';
+  process.env.EMAIL_FROM || 'StudyRoom <noreply@utb.edu.co>';
 
 const smtpConfigured = Boolean(
   process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
@@ -42,7 +42,7 @@ export function buildEmailHtml(options: {
   <div style="margin:0;padding:32px 16px;background:#E7EEFD;font-family:Arial,Helvetica,sans-serif;color:#0F172A;">
     <div style="max-width:520px;margin:0 auto;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(11,79,196,0.12);">
       <div style="background:#0B4FC4;padding:24px 32px;">
-        <p style="margin:0;font-size:18px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Campus Collaborative Study</p>
+        <p style="margin:0;font-size:18px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">StudyRoom</p>
         <p style="margin:4px 0 0;font-size:12px;color:#DCE9FB;">Universidad Tecnológica de Bolívar</p>
       </div>
       <div style="padding:32px;">

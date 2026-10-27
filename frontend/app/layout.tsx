@@ -5,7 +5,7 @@ import { NotificationsProvider } from '@/lib/notifications-context';
 import { NotificationToast } from '@/components/notifications/NotificationToast';
 
 export const metadata: Metadata = {
-  title: 'Campus Collaborative Study | UTB',
+  title: 'StudyRoom | UTB',
   description: 'Plataforma de estudio simultáneo y gestión de tutorías académicas de la Universidad Tecnológica de Bolívar.',
 };
 

@@ -1,7 +1,7 @@
 {
   "name": "studyroom-backend",
   "version": "1.0.0",
-  "description": "Backend API Gateway para Campus Collaborative Study",
+  "description": "Backend API Gateway para StudyRoom",
   "main": "src/server.ts",
   "scripts": {
     "prisma:generate": "prisma generate --schema=../prisma/schema.prisma",

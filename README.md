@@ -1,4 +1,4 @@
-# Campus Collaborative Study — Universidad Tecnológica de Bolívar (UTB)
+# StudyRoom — Universidad Tecnológica de Bolívar (UTB)
 
 Plataforma colaborativa web (responsive desde 360px) para estudiantes de primeros semestres (Cálculo, Física, Álgebra, Estadística) que permite:
 1. **Unirse a salas de estudio simultáneo** y resolver ejercicios en conjunto con mensajería en tiempo real (< 2s) y control de cupo configurable (2 a 50 participantes, 10 por defecto).
@@ -129,10 +129,10 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 
 | Método | Endpoint | Descripción |
 | --- | --- | --- |
-| `GET` | `/api/salas` | Lista las salas activas y programadas con su anfitrión y número de participantes. |
-| `POST` | `/api/salas` | Crea una sala. El usuario autenticado queda como anfitrión y primer participante. |
+| `GET` | `/api/salas` | Lista las salas activas y programadas con su anfitrión, participantes y nuevos campos. Las salas privadas solo aparecen para su anfitrión, sus participantes activos o si se consulta con `?codigo=CODIGO`. |
+| `POST` | `/api/salas` | Crea una sala. Acepta `titulo`, `asignatura`, `tema`, `descripcion`, `estado` (`Activa`/`Programada`), `privacidad` (`Pública`/`Privada`), `cupoMaximo` (2–50) y `programadaEn` (ISO, obligatoria y futura para salas programadas). Si es privada, genera un `codigoAcceso` único de 6 caracteres. El usuario autenticado queda como anfitrión y primer participante. |
 | `GET` | `/api/salas/:id` | Devuelve el detalle de una sala y sus participantes activos. |
-| `POST` | `/api/salas/:id/unirse` | Une al usuario autenticado a la sala (valida el cupo). |
+| `POST` | `/api/salas/:id/unirse` | Une al usuario autenticado a la sala (valida el cupo). En salas privadas exige `codigoAcceso`, salvo que quien se una sea el anfitrión o ya sea participante. Las salas programadas solo admiten ingresos desde su fecha y hora. |
 | `POST` | `/api/salas/:id/abandonar` | Marca la participación del usuario como abandonada y lo saca de la mensajería en tiempo real. |
 | `GET` | `/api/salas/:id/mensajes` | Devuelve los últimos 100 mensajes de la sala en orden cronológico. Solo para participantes activos. |
 | `GET` | `/api/salas/:id/materiales` | Lista los materiales de la sala, del más reciente al más antiguo. Solo para participantes activos. |
@@ -140,12 +140,27 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | `GET` | `/api/salas/:id/materiales/:materialId/descargar` | Descarga el archivo original. Requiere JWT y participación activa. |
 | `DELETE` | `/api/salas/:id/materiales/:materialId` | Elimina un material. Puede hacerlo quien lo subió, el anfitrión de la sala o un administrador. |
 
-### Pantallas de salas (frontend)
+### Salas programadas y privadas
+
+| Campo / comportamiento | Descripción |
+| --- | --- |
+| `SalaEstudio.programadaEn` | `DateTime?`. Fecha y hora de apertura de una sala programada. Debe ser futura al crear la sala. |
+| `SalaEstudio.codigoAcceso` | `String? @unique`. Código aleatorio de 6 caracteres que se genera para las salas privadas. |
+| Activación automática | El scheduler existente revisa cada minuto las salas `PROGRAMADA` cuya hora ya pasó y las pasa a `ACTIVA`. |
+| Visibilidad | El listado excluye las salas privadas ajenas. El anfitrión y los participantes reciben el código; el resto debe conocerlo o abrir el enlace. |
+| Formato de fecha en UI | `mié, 28 de oct, 2:26 p. m.` (según la zona horaria del navegador). |
+
+### Navegación autenticada (frontend)
+
+Todas las pantallas autenticadas comparten el componente `AppShell`: barra lateral con Inicio, Salas, Tutorías, Foro, Repositorio, Banco de ejercicios y Administración (solo para `ADMINISTRADOR`), además de la barra superior con buscador (`⌘K`/`Ctrl+K`), modo oscuro, notificaciones y acceso al perfil. La barra lateral se colapsa en móvil desde 360 px. La sala en vivo `/salas/[id]` mantiene su propio diseño sin `AppShell`.
 
 | Ruta | Descripción |
 | --- | --- |
-| `/salas` | Listado real desde la API, búsqueda, filtros por asignatura/estado, creación de salas y acceso a cada sala. |
+| `/inicio` | Panel de bienvenida con saludo por hora, salas en vivo, próximas tutorías y acceso rápido a Salas, Tutorías y Foro. Es la ruta posterior al inicio de sesión. |
+| `/salas` | Listado real desde la API con búsqueda por título/tema/descripción, segmentado Todas/En vivo/Programadas, chips por materia, tarjetas con cupo, fecha programada, candado de privacidad y código para el anfitrión. Incluye el modal de creación y el acceso mediante código. |
 | `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye mensajería en tiempo real con historial y presencia, y la pestaña de materiales con carga, descarga y eliminación de archivos. |
+| `/foro`, `/repositorio`, `/banco-ejercicios` | Páginas “Próximamente” dentro de `AppShell` para las funcionalidades en preparación. |
+| `/tutorias`, `/perfil`, `/perfil/editar`, `/perfil/monitor`, `/admin/monitores` | Conservan su contenido actual y ahora se muestran dentro de `AppShell`. |
 
 ---
 
@@ -246,7 +261,7 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | `/perfil/monitor` | Solicitud para ser monitor, edición del perfil público y gestión de bloques de disponibilidad. |
 | `/admin/monitores` | Revisión, aprobación y rechazo de solicitudes de monitor. |
 
-Los enlaces a **Tutorías** están disponibles desde la pantalla de salas. Los monitores ven el acceso a su perfil y los administradores al panel de aprobación.
+Los enlaces a **Tutorías** están disponibles en la barra lateral de todas las pantallas autenticadas. Los monitores ven el acceso a su perfil desde la barra lateral/buscador y los administradores al panel de aprobación.
 
 ---
 
@@ -256,7 +271,7 @@ Cada cambio relevante del ciclo de tutorías y de las postulaciones de monitor g
 
 ### Experiencia de usuario
 
-- **Campanita con contador** de avisos sin leer en `/salas`, `/salas/[id]`, `/tutorias`, `/perfil/monitor` y `/admin/monitores`.
+- **Campanita con contador** de avisos sin leer en la barra superior de `AppShell` (todas las pantallas autenticadas) y en la sala en vivo `/salas/[id]`.
 - **Panel desplegable** con las últimas 30 notificaciones, su tipo, mensaje, fecha relativa y estado de lectura.
 - **Aviso flotante (toast)** al recibir una notificación mientras la aplicación está abierta.
 - **Marcado individual o masivo** como leído, con actualización inmediata del contador.

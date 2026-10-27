@@ -1,7 +1,7 @@
 {
   "name": "studyroom-klv",
   "version": "1.0.0",
-  "description": "Campus Collaborative Study - Universidad Tecnológica de Bolívar (UTB)",
+  "description": "StudyRoom - Universidad Tecnológica de Bolívar (UTB)",
   "private": true,
   "scripts": {
     "dev": "npm run dev:frontend",

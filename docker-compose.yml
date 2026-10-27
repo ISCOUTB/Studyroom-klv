@@ -1,5 +1,5 @@
 # ============================================================
-# Campus Collaborative Study (UTB) - Base de datos local
+# StudyRoom (UTB) - Base de datos local
 # Uso:
 #   npm run db:up      -> levanta PostgreSQL en localhost:5432
 #   npm run db:down    -> detiene el contenedor (conserva los datos)

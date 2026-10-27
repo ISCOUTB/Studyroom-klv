@@ -30,3 +30,96 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/*
+ * Modo oscuro del área autenticada.
+ * Se limita a .app-shell para no alterar el login ni las pantallas públicas.
+ */
+.app-shell.dark {
+  color-scheme: dark;
+  background-color: #0b1220;
+  color: #e2e8f0;
+}
+
+.app-shell.dark .bg-slate-50 {
+  background-color: #0b1220;
+}
+
+.app-shell.dark .bg-slate-100 {
+  background-color: #172033;
+}
+
+.app-shell.dark .bg-white:not(.keep-white) {
+  background-color: #111a2e;
+}
+
+.app-shell.dark .bg-white\/95 {
+  background-color: rgba(17, 26, 46, 0.95);
+}
+
+.app-shell.dark .bg-white\/85 {
+  background-color: rgba(17, 26, 46, 0.85);
+}
+
+.app-shell.dark .bg-blue-50 {
+  background-color: #12224a;
+}
+
+.app-shell.dark .text-slate-900,
+.app-shell.dark .text-slate-800 {
+  color: #e5edf9;
+}
+
+.app-shell.dark .text-slate-700 {
+  color: #cbd5e1;
+}
+
+.app-shell.dark .text-slate-600,
+.app-shell.dark .text-slate-500 {
+  color: #94a3b8;
+}
+
+.app-shell.dark .text-slate-400 {
+  color: #64748b;
+}
+
+.app-shell.dark .text-\[\#0B4FC4\] {
+  color: #7fb2ff;
+}
+
+.app-shell.dark .border-slate-200 {
+  border-color: #263247;
+}
+
+.app-shell.dark .border-slate-100,
+.app-shell.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1d2940;
+}
+
+.app-shell.dark .hover\:bg-slate-50:hover,
+.app-shell.dark .hover\:bg-slate-100:hover,
+.app-shell.dark .hover\:bg-slate-200:hover {
+  background-color: #172033;
+}
+
+.app-shell.dark .hover\:bg-white:hover {
+  background-color: #162033;
+}
+
+.app-shell.dark input::placeholder,
+.app-shell.dark textarea::placeholder {
+  color: #64748b;
+}
+
+.app-shell.dark .shadow-sm,
+.app-shell.dark .shadow-md {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.app-shell.dark ::-webkit-scrollbar-track {
+  background: #111a2e;
+}
+
+.app-shell.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}

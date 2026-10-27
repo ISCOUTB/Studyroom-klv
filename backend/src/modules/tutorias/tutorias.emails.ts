@@ -64,7 +64,7 @@ export async function enviarRecordatorioTutoria({
 
   await deliverEmail({
     to: correo,
-    subject: `Recordatorio: tutoría el ${fecha} — Campus Collaborative Study`,
+    subject: `Recordatorio: tutoría el ${fecha} — StudyRoom`,
     devLabel: 'Recordatorio de tutoría',
     devUrl: url,
     devDetalle: `${fecha} · ${modalidad}${

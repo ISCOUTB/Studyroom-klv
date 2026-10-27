@@ -52,7 +52,7 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
         </div>
 
         <p className="mt-5 text-center text-[11px] text-slate-400">
-          Campus Collaborative Study · Universidad Tecnológica de Bolívar
+          StudyRoom · Universidad Tecnológica de Bolívar
         </p>
       </div>
     </div>

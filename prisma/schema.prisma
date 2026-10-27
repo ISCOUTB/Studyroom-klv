@@ -1,5 +1,5 @@
 // ============================================================
-// Prisma Schema — Campus Collaborative Study (UTB)
+// Prisma Schema — StudyRoom (UTB)
 // ============================================================
 
 generator client {
@@ -142,6 +142,8 @@ model SalaEstudio {
   cupoMaximo    Int                @default(10) @map("cupo_maximo")
   privacidad    PrivacidadSalaEnum @default(PUBLICA)
   estado        EstadoSalaEnum     @default(ACTIVA)
+  programadaEn  DateTime?          @map("programada_en")
+  codigoAcceso  String?            @unique @map("codigo_acceso")
   creadoEn      DateTime           @default(now()) @map("creado_en")
 
   participantes ParticipacionSala[]

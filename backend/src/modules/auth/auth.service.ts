@@ -9,14 +9,14 @@ export const sendVerificationEmail = async (email: string, token: string) => {
 
   await deliverEmail({
     to: email,
-    subject: 'Verifica tu cuenta — Campus Collaborative Study',
+    subject: 'Verifica tu cuenta — StudyRoom',
     devLabel: 'Enlace de verificación',
     devUrl: url,
-    text: `Verifica tu cuenta de Campus Collaborative Study: ${url}\n\nEste enlace vence en 24 horas.`,
+    text: `Verifica tu cuenta de StudyRoom: ${url}\n\nEste enlace vence en 24 horas.`,
     html: buildEmailHtml({
       title: 'Verifica tu correo institucional',
       intro:
-        'Recibimos tu registro en Campus Collaborative Study. Confirma tu correo para activar tu cuenta y comenzar a estudiar en comunidad.',
+        'Recibimos tu registro en StudyRoom. Confirma tu correo para activar tu cuenta y comenzar a estudiar en comunidad.',
       buttonText: 'Verificar mi cuenta',
       url,
       note: 'Este enlace vence en 24 horas. Si no creaste esta cuenta, puedes ignorar este mensaje.',
@@ -29,10 +29,10 @@ export const sendResetPasswordEmail = async (email: string, token: string) => {
 
   await deliverEmail({
     to: email,
-    subject: 'Recupera tu contraseña — Campus Collaborative Study',
+    subject: 'Recupera tu contraseña — StudyRoom',
     devLabel: 'Enlace de recuperación',
     devUrl: url,
-    text: `Restablece tu contraseña de Campus Collaborative Study: ${url}\n\nEste enlace vence en 1 hora.`,
+    text: `Restablece tu contraseña de StudyRoom: ${url}\n\nEste enlace vence en 1 hora.`,
     html: buildEmailHtml({
       title: 'Restablece tu contraseña',
       intro:

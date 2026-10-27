@@ -3,6 +3,7 @@ import {
   enviarRecordatoriosProximos,
   MINUTOS_RECORDATORIO,
 } from './tutorias.service';
+import { activarSalasProgramadas } from '../salas/salas.service';
 
 /**
  * Cada cuánto se ejecuta el ciclo de mantenimiento. En producción conviene
@@ -23,10 +24,11 @@ async function ejecutarCiclo() {
   try {
     const expiradas = await actualizarSolicitudesExpiradas();
     const recordatorios = await enviarRecordatoriosProximos();
+    const salasActivadas = await activarSalasProgramadas();
 
-    if (expiradas > 0 || recordatorios > 0) {
+    if (expiradas > 0 || recordatorios > 0 || salasActivadas > 0) {
       console.log(
-        `[scheduler] ${expiradas} solicitud(es) expirada(s), ${recordatorios} recordatorio(s) enviado(s).`
+        `[scheduler] ${expiradas} solicitud(es) expirada(s), ${recordatorios} recordatorio(s) enviado(s), ${salasActivadas} sala(s) activada(s).`
       );
     }
   } catch (error) {

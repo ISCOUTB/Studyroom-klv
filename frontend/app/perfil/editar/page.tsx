@@ -3,8 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { UTBLogo } from '@/components/layout/UTBLogo';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { AppShell } from '@/components/layout/AppShell';
 import { AvatarEditor } from '@/components/perfil/AvatarEditor';
 import { apiRequest } from '@/lib/api';
 
@@ -79,7 +78,7 @@ function dividirNombre(
 }
 
 export default function EditarPerfilPage() {
-  const { user, token, isLoading, logout, refreshUser } = useAuth();
+  const { user, token, isLoading, refreshUser } = useAuth();
   const router = useRouter();
 
   const [nombres, setNombres] = useState('');
@@ -197,36 +196,7 @@ export default function EditarPerfilPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <UTBLogo className="h-10" />
-            <span className="hidden md:inline font-bold text-slate-800 text-lg border-l border-slate-200 pl-6">
-              Campus Collaborative Study
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push('/salas')}
-              className="text-xs font-semibold text-slate-600 hover:text-[#0B4FC4] px-2 py-2"
-            >
-              ← <span className="hidden sm:inline">Salas</span>
-            </button>
-
-            <NotificationBell />
-
-            <button
-              onClick={logout}
-              className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"
-            >
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-      </header>
-
+    <AppShell>
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Migas de pan */}
         <nav aria-label="Ruta de navegación" className="mb-6 text-xs text-slate-500">
@@ -557,6 +527,6 @@ export default function EditarPerfilPage() {
           </div>
         </form>
       </main>
-    </div>
+    </AppShell>
   );
 }

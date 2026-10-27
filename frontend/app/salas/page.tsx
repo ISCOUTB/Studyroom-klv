@@ -1,61 +1,197 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@/lib/auth-context';
-import { UTBLogo } from '@/components/layout/UTBLogo';
-import { NotificationBell } from '@/components/notifications/NotificationBell';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AppShell } from '@/components/layout/AppShell';
+import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/api';
 import {
   ASIGNATURAS,
   type Asignatura,
   type Sala,
-  imagenDeAsignatura,
+  colorDeMateria,
+  formatearFechaProgramada,
+  inicialesDe,
 } from '@/lib/salas';
 
+type FiltroEstado = 'Todas' | 'En vivo' | 'Programadas';
+type FiltroMateria = 'Todas' | Asignatura;
+type CuandoSala = 'ahora' | 'programar';
+type PrivacidadSala = 'publica' | 'privada';
+
+const MATERIAS_CHIPS: Asignatura[] = [
+  'Álgebra Lineal',
+  'Cálculo I',
+  'Cálculo Integral',
+  'Estadística',
+  'Física I',
+];
+
+const FILTROS_ESTADO: FiltroEstado[] = ['Todas', 'En vivo', 'Programadas'];
+
+function normalizar(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function fechaHoyLocal(): string {
+  const hoy = new Date();
+  const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+  const dia = String(hoy.getDate()).padStart(2, '0');
+  return `${hoy.getFullYear()}-${mes}-${dia}`;
+}
+
+function IconoBuscar({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function IconoPlay({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14Z" />
+    </svg>
+  );
+}
+
+function IconoMas({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function IconoCandado({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="4.5" y="10" width="15" height="10.5" rx="2" />
+      <path d="M8 10V7.5a4 4 0 0 1 8 0V10" />
+    </svg>
+  );
+}
+
+function IconoCalendario({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M8 3v4M16 3v4M3.5 9.5h17" />
+    </svg>
+  );
+}
+
+function IconoCopiar({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="8.5" y="8.5" width="12" height="12" rx="2" />
+      <path d="M15.5 8.5v-3a2 2 0 0 0-2-2h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+    </svg>
+  );
+}
+
 export default function SalasPage() {
-  const { user, token, isLoading, logout } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const router = useRouter();
 
   const [salas, setSalas] = useState<Sala[]>([]);
-  const [loadingSalas, setLoadingSalas] = useState(true);
-  const [errorSalas, setErrorSalas] = useState('');
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
   const [accionError, setAccionError] = useState('');
   const [uniendoId, setUniendoId] = useState<string | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [asignaturaFilter, setAsignaturaFilter] = useState('Todas');
-  const [estadoFilter, setEstadoFilter] = useState('Todos');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('Todas');
+  const [filtroMateria, setFiltroMateria] = useState<FiltroMateria>('Todas');
 
-  // Formulario nueva sala
-  const [nuevoTitulo, setNuevoTitulo] = useState('');
-  const [nuevaAsignatura, setNuevaAsignatura] = useState<Asignatura>('Cálculo I');
-  const [nuevoTema, setNuevoTema] = useState('');
-  const [nuevaDesc, setNuevaDesc] = useState('');
-  const [nuevoEstado, setNuevoEstado] = useState<'Activa' | 'Programada'>('Activa');
-  const [creating, setCreating] = useState(false);
+  const [modalCrear, setModalCrear] = useState(false);
+  const [titulo, setTitulo] = useState('');
+  const [asignatura, setAsignatura] = useState<Asignatura | ''>('');
+  const [tema, setTema] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [cuando, setCuando] = useState<CuandoSala>('ahora');
+  const [fecha, setFecha] = useState('');
+  const [hora, setHora] = useState('');
+  const [privacidad, setPrivacidad] = useState<PrivacidadSala>('publica');
+  const [cupo, setCupo] = useState(10);
+  const [creando, setCreando] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [salaCreada, setSalaCreada] = useState<Sala | null>(null);
+  const [codigoCopiado, setCodigoCopiado] = useState('');
+
+  const [accesoAbierto, setAccesoAbierto] = useState(false);
+  const [salaDestino, setSalaDestino] = useState<Sala | null>(null);
+  const [codigo, setCodigo] = useState('');
+  const [codigoError, setCodigoError] = useState('');
+  const [codigoCargando, setCodigoCargando] = useState(false);
 
   const cargarSalas = useCallback(async () => {
     if (!token) return;
 
-    setLoadingSalas(true);
-    setErrorSalas('');
-
+    setCargando(true);
+    setError('');
     try {
       const data = await apiRequest<{ salas: Sala[] }>('/api/salas', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setSalas(data.salas ?? []);
     } catch (err) {
-      setErrorSalas(
+      setError(
         err instanceof Error
           ? err.message
           : 'No se pudieron cargar las salas de estudio.'
       );
     } finally {
-      setLoadingSalas(false);
+      setCargando(false);
     }
   }, [token]);
 
@@ -68,37 +204,108 @@ export default function SalasPage() {
     }
 
     cargarSalas();
+    const intervalo = window.setInterval(cargarSalas, 60_000);
+    return () => window.clearInterval(intervalo);
   }, [isLoading, user, token, router, cargarSalas]);
 
-  const resetFormulario = () => {
-    setNuevoTitulo('');
-    setNuevaAsignatura('Cálculo I');
-    setNuevoTema('');
-    setNuevaDesc('');
-    setNuevoEstado('Activa');
+  const reiniciarFormulario = () => {
+    setTitulo('');
+    setAsignatura('');
+    setTema('');
+    setDescripcion('');
+    setCuando('ahora');
+    setFecha('');
+    setHora('');
+    setPrivacidad('publica');
+    setCupo(10);
     setModalError('');
+    setSalaCreada(null);
+    setCodigoCopiado('');
   };
 
-  const handleCrearSala = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const abrirModalCrear = () => {
+    reiniciarFormulario();
+    setModalCrear(true);
+  };
+
+  const cerrarModalCrear = () => {
+    if (creando) return;
+    setModalCrear(false);
+    reiniciarFormulario();
+  };
+
+  const abrirAcceso = (sala: Sala | null) => {
+    setSalaDestino(sala);
+    setCodigo('');
+    setCodigoError('');
+    setAccesoAbierto(true);
+  };
+
+  const cerrarAcceso = () => {
+    if (codigoCargando) return;
+    setAccesoAbierto(false);
+    setSalaDestino(null);
+    setCodigo('');
+    setCodigoError('');
+  };
+
+  const copiarCodigo = async (valor: string, clave: string) => {
+    try {
+      await navigator.clipboard.writeText(valor);
+      setCodigoCopiado(clave);
+    } catch {
+      setCodigoCopiado('');
+    }
+  };
+
+  const handleCrearSala = async (evento: React.FormEvent) => {
+    evento.preventDefault();
     setModalError('');
 
     if (!token) return;
 
-    if (nuevoTitulo.trim().length < 3) {
+    if (titulo.trim().length < 3) {
       setModalError('El título debe tener al menos 3 caracteres.');
       return;
     }
-    if (nuevoTema.trim().length < 3) {
+    if (!asignatura) {
+      setModalError('Selecciona una asignatura.');
+      return;
+    }
+    if (tema.trim().length < 3) {
       setModalError('El tema debe tener al menos 3 caracteres.');
       return;
     }
-    if (nuevaDesc.trim().length < 5) {
+    if (descripcion.trim().length < 5) {
       setModalError('La descripción debe tener al menos 5 caracteres.');
       return;
     }
 
-    setCreating(true);
+    let programadaEn: string | null = null;
+    if (cuando === 'programar') {
+      if (!fecha || !hora) {
+        setModalError('Selecciona la fecha y la hora de la sala.');
+        return;
+      }
+
+      const fechaHora = new Date(`${fecha}T${hora}:00`);
+      if (Number.isNaN(fechaHora.getTime())) {
+        setModalError('La fecha y la hora no son válidas.');
+        return;
+      }
+      if (fechaHora.getTime() <= Date.now()) {
+        setModalError('La fecha y la hora deben ser futuras.');
+        return;
+      }
+      programadaEn = fechaHora.toISOString();
+    }
+
+    if (!Number.isInteger(cupo) || cupo < 2 || cupo > 50) {
+      setModalError('El cupo debe estar entre 2 y 50 personas.');
+      return;
+    }
+
+    setCreando(true);
     try {
       const data = await apiRequest<{ message: string; sala: Sala }>('/api/salas', {
         method: 'POST',
@@ -107,17 +314,19 @@ export default function SalasPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          titulo: nuevoTitulo.trim(),
-          asignatura: nuevaAsignatura,
-          tema: nuevoTema.trim(),
-          descripcion: nuevaDesc.trim(),
-          estado: nuevoEstado,
+          titulo: titulo.trim(),
+          asignatura,
+          tema: tema.trim(),
+          descripcion: descripcion.trim(),
+          estado: cuando === 'programar' ? 'Programada' : 'Activa',
+          privacidad: privacidad === 'privada' ? 'Privada' : 'Pública',
+          cupoMaximo: cupo,
+          programadaEn,
         }),
       });
 
       setSalas((prev) => [data.sala, ...prev]);
-      setIsModalOpen(false);
-      resetFormulario();
+      setSalaCreada(data.sala);
     } catch (err) {
       setModalError(
         err instanceof Error
@@ -125,27 +334,53 @@ export default function SalasPage() {
           : 'No se pudo crear la sala de estudio.'
       );
     } finally {
-      setCreating(false);
+      setCreando(false);
     }
   };
 
-  const handleEntrarSala = async (sala: Sala) => {
+  const entrarSala = async (sala: Sala, codigoIngresado?: string) => {
+    if (!token) return;
     setAccionError('');
 
-    if (sala.participando) {
+    await apiRequest(`/api/salas/${sala.id}/unirse`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: codigoIngresado
+        ? JSON.stringify({ codigoAcceso: codigoIngresado })
+        : undefined,
+    });
+  };
+
+  const handleEntrarSala = async (sala: Sala) => {
+    if (sala.participando || sala.esAnfitrion) {
       router.push(`/salas/${sala.id}`);
       return;
     }
 
-    if (!token) return;
+    if (sala.privacidad === 'Privada') {
+      abrirAcceso(sala);
+      return;
+    }
+
+    if (
+      sala.estado === 'Programada' &&
+      sala.programadaEn &&
+      new Date(sala.programadaEn).getTime() > Date.now()
+    ) {
+      setAccionError(
+        `La sala “${sala.titulo}” comienza el ${formatearFechaProgramada(
+          sala.programadaEn
+        )}. Te esperamos.`
+      );
+      return;
+    }
 
     setUniendoId(sala.id);
     try {
-      await apiRequest(`/api/salas/${sala.id}/unirse`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
+      await entrarSala(sala);
       setSalas((prev) =>
         prev.map((item) =>
           item.id === sala.id
@@ -160,7 +395,6 @@ export default function SalasPage() {
             : item
         )
       );
-
       router.push(`/salas/${sala.id}`);
     } catch (err) {
       setAccionError(
@@ -171,447 +405,1038 @@ export default function SalasPage() {
     }
   };
 
-  const filteredSalas = salas.filter((s) => {
-    const matchesSearch =
-      s.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.tema.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.asignatura.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesAsignatura =
-      asignaturaFilter === 'Todas' || s.asignatura === asignaturaFilter;
-    const matchesEstado = estadoFilter === 'Todos' || s.estado === estadoFilter;
-    return matchesSearch && matchesAsignatura && matchesEstado;
-  });
+  const handleEstudiarAhora = async () => {
+    setAccionError('');
+    const activas = salas.filter((sala) => sala.estado === 'Activa');
+    const propia = activas.find(
+      (sala) => sala.participando || sala.esAnfitrion
+    );
+
+    if (propia) {
+      router.push(`/salas/${propia.id}`);
+      return;
+    }
+
+    const disponible = activas.find(
+      (sala) =>
+        sala.privacidad !== 'Privada' &&
+        sala.participantesActuales < sala.cupoMaximo
+    );
+
+    if (disponible) {
+      await handleEntrarSala(disponible);
+      return;
+    }
+
+    setAccionError(
+      'No hay salas en vivo con cupo disponible. Crea una sala para empezar ahora mismo.'
+    );
+    abrirModalCrear();
+  };
+
+  const handleAcceso = async (evento: React.FormEvent) => {
+    evento.preventDefault();
+    setCodigoError('');
+
+    const valor = codigo.trim().toUpperCase();
+    if (valor.length < 4) {
+      setCodigoError('Ingresa el código de acceso de la sala.');
+      return;
+    }
+
+    if (!token) return;
+    setCodigoCargando(true);
+
+    try {
+      if (salaDestino) {
+        await entrarSala(salaDestino, valor);
+        setAccesoAbierto(false);
+        router.push(`/salas/${salaDestino.id}`);
+        return;
+      }
+
+      const data = await apiRequest<{ salas: Sala[] }>(
+        `/api/salas?codigo=${encodeURIComponent(valor)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const encontrada = data.salas?.[0];
+
+      if (!encontrada) {
+        setCodigoError(
+          'No encontramos una sala con ese código. Verifica e inténtalo de nuevo.'
+        );
+        return;
+      }
+
+      if (!encontrada.participando && !encontrada.esAnfitrion) {
+        await entrarSala(encontrada, valor);
+      }
+
+      setAccesoAbierto(false);
+      router.push(`/salas/${encontrada.id}`);
+    } catch (err) {
+      setCodigoError(
+        err instanceof Error ? err.message : 'No se pudo entrar a la sala.'
+      );
+    } finally {
+      setCodigoCargando(false);
+    }
+  };
+
+  const filtradas = useMemo(() => {
+    const texto = normalizar(busqueda.trim());
+
+    return salas.filter((sala) => {
+      const coincideTexto =
+        !texto ||
+        normalizar(
+          `${sala.titulo} ${sala.tema} ${sala.descripcion} ${sala.asignatura}`
+        ).includes(texto);
+
+      const coincideEstado =
+        filtroEstado === 'Todas' ||
+        (filtroEstado === 'En vivo'
+          ? sala.estado === 'Activa'
+          : sala.estado === 'Programada');
+
+      const coincideMateria =
+        filtroMateria === 'Todas' || sala.asignatura === filtroMateria;
+
+      return coincideTexto && coincideEstado && coincideMateria;
+    });
+  }, [salas, busqueda, filtroEstado, filtroMateria]);
 
   if (isLoading || !user) return null;
 
+  const hayFiltrosActivos =
+    Boolean(busqueda.trim()) ||
+    filtroEstado !== 'Todas' ||
+    filtroMateria !== 'Todas';
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
-      {/* Barra superior (Navbar referencia visual 2) */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <UTBLogo className="h-10" />
-            <span className="hidden md:inline font-bold text-slate-800 text-lg border-l border-slate-200 pl-6">
-              Campus Collaborative Study
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => router.push('/perfil')}
-              title="Ver mi perfil"
-              aria-label="Ver mi perfil"
-              className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 transition-colors hover:bg-slate-200 hover:border-[#0B4FC4]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B4FC4]/40"
-            >
-              <span className="w-7 h-7 bg-[#0B4FC4] text-white rounded-full flex items-center justify-center font-bold text-xs">
-                {user.nombre.substring(0, 2).toUpperCase()}
-              </span>
-              <span className="text-xs font-semibold text-slate-700 hidden sm:inline">
-                {user.rol === 'TUTOR'
-                  ? 'Estudiante / Monitor'
-                  : user.rol === 'ADMINISTRADOR'
-                    ? 'Administrador'
-                    : 'Estudiante'}
-              </span>
-            </button>
-
-            <button
-              onClick={() => router.push('/tutorias')}
-              className="text-xs font-semibold text-[#0B4FC4] hover:underline px-2 py-2"
-            >
-              📅 <span className="hidden sm:inline">Tutorías</span>
-            </button>
-
-            <NotificationBell />
-
-            <button
-              onClick={logout}
-              className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"
-            >
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Contenido principal */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-black text-[#0B4FC4] tracking-tight mb-2">
+    <AppShell>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {/* Encabezado */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#0B4FC4]">
+              Comunidad StudyRoom
+            </p>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
               Salas de estudio
             </h1>
-            <p className="text-slate-600 text-sm">
-              Encuentra tu grupo y aprende en equipo.
+            <p className="mt-1.5 max-w-2xl text-sm text-slate-500">
+              Encuentra compañeros de tu materia, estudia en vivo y resuelvan
+              ejercicios juntos.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {user.rol === 'TUTOR' && (
-              <button
-                onClick={() => router.push('/perfil/monitor')}
-                className="px-4 py-2.5 bg-white border border-slate-200 hover:border-[#0B4FC4] text-[#0B4FC4] font-semibold rounded-xl text-xs transition-colors"
-              >
-                Mi perfil de monitor
-              </button>
-            )}
-            {user.rol === 'ADMINISTRADOR' && (
-              <button
-                onClick={() => router.push('/admin/monitores')}
-                className="px-4 py-2.5 bg-white border border-slate-200 hover:border-[#0B4FC4] text-[#0B4FC4] font-semibold rounded-xl text-xs transition-colors"
-              >
-                Panel de monitores
-              </button>
-            )}
+          <div className="flex flex-col gap-2 sm:flex-row lg:shrink-0">
+            <button
+              type="button"
+              onClick={handleEstudiarAhora}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-colors hover:border-[#0B4FC4]/30 hover:text-[#0B4FC4]"
+            >
+              <IconoPlay className="h-3.5 w-3.5" />
+              Estudiar ahora
+            </button>
+            <button
+              type="button"
+              onClick={abrirModalCrear}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B4FC4] px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-500/20 transition-colors hover:bg-[#093fa3]"
+            >
+              <IconoMas />
+              Crear sala
+            </button>
           </div>
         </div>
 
-        {/* Buscador y Filtros */}
-        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full md:w-96">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-              🔍
-            </span>
-            <input
-              type="text"
-              placeholder="Buscar por tema o asignatura…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B4FC4] focus:bg-white transition-all"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs">
-              <span className="text-slate-400">📚 Asignatura:</span>
-              <select
-                value={asignaturaFilter}
-                onChange={(e) => setAsignaturaFilter(e.target.value)}
-                className="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer"
-              >
-                <option value="Todas">Todas las asignaturas</option>
-                {ASIGNATURAS.map((asignatura) => (
-                  <option key={asignatura} value={asignatura}>
-                    {asignatura}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs">
-              <span className="text-slate-400">⚡ Estado:</span>
-              <select
-                value={estadoFilter}
-                onChange={(e) => setEstadoFilter(e.target.value)}
-                className="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer"
-              >
-                <option value="Todos">Todos los estados</option>
-                <option value="Activa">Activa</option>
-                <option value="Programada">Programada</option>
-              </select>
+        {/* Buscador y filtros */}
+        <div className="mt-6 space-y-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="relative min-w-0 flex-1 md:max-w-xl">
+              <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                <IconoBuscar className="h-[18px] w-[18px]" />
+              </span>
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(evento) => setBusqueda(evento.target.value)}
+                placeholder="Busca por título, tema o descripción…"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#0B4FC4] focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+                aria-label="Buscar salas por título, tema o descripción"
+              />
             </div>
 
             <button
-              onClick={() => {
-                setModalError('');
-                setIsModalOpen(true);
-              }}
-              className="w-full md:w-auto px-5 py-2.5 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-semibold rounded-xl text-xs shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2"
+              type="button"
+              onClick={() => abrirAcceso(null)}
+              className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-dashed border-slate-300 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-500 transition-colors hover:border-[#0B4FC4]/40 hover:text-[#0B4FC4] md:self-auto"
             >
-              <span>+</span>
-              <span>Crear Sala de Estudio</span>
+              <IconoCandado className="h-3.5 w-3.5" />
+              Tengo un código
             </button>
+
+            <div
+              className="inline-flex shrink-0 rounded-xl border border-slate-200 bg-white p-1 md:ml-auto"
+              role="tablist"
+              aria-label="Filtrar por estado"
+            >
+              {FILTROS_ESTADO.map((filtro) => {
+                const activo = filtroEstado === filtro;
+                return (
+                  <button
+                    key={filtro}
+                    type="button"
+                    role="tab"
+                    aria-selected={activo}
+                    onClick={() => setFiltroEstado(filtro)}
+                    className={`flex-1 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors md:flex-none ${
+                      activo
+                        ? 'bg-[#0B4FC4] text-white shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                    }`}
+                  >
+                    {filtro}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              type="button"
+              onClick={() => setFiltroMateria('Todas')}
+              className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                filtroMateria === 'Todas'
+                  ? 'border-[#0B4FC4] bg-blue-50 text-[#0B4FC4]'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-[#0B4FC4]" />
+              Todas las materias
+            </button>
+            {MATERIAS_CHIPS.map((materia) => {
+              const color = colorDeMateria(materia);
+              const activo = filtroMateria === materia;
+              return (
+                <button
+                  key={materia}
+                  type="button"
+                  onClick={() => setFiltroMateria(materia)}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                    activo
+                      ? 'border-[#0B4FC4] bg-blue-50 text-[#0B4FC4]'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${color.punto}`} />
+                  {materia}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {accionError && (
           <div
             role="alert"
-            className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
           >
-            {accionError}
+            <span className="min-w-0">{accionError}</span>
+            <button
+              type="button"
+              onClick={() => setAccionError('')}
+              aria-label="Cerrar aviso"
+              className="shrink-0 font-bold"
+            >
+              ✕
+            </button>
           </div>
         )}
 
-        {/* Tarjetas de Salas */}
-        {loadingSalas ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((item) => (
-              <div
-                key={item}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden animate-pulse"
-              >
-                <div className="h-40 w-full bg-slate-200" />
-                <div className="p-5 space-y-3">
-                  <div className="h-5 w-2/3 rounded bg-slate-200" />
-                  <div className="h-3 w-full rounded bg-slate-100" />
-                  <div className="h-3 w-1/2 rounded bg-slate-100" />
-                </div>
-                <div className="p-5 pt-0">
-                  <div className="h-10 w-full rounded-xl bg-slate-100" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : errorSalas ? (
-          <div className="rounded-2xl border border-red-200 bg-white px-6 py-12 text-center shadow-sm">
-            <div className="text-4xl mb-3">⚠️</div>
-            <h2 className="text-lg font-bold text-slate-800 mb-2">
-              No pudimos cargar las salas
-            </h2>
-            <p className="text-sm text-slate-500 mb-5">{errorSalas}</p>
+        {error && (
+          <div
+            role="alert"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700"
+          >
+            <p>{error}</p>
             <button
+              type="button"
               onClick={cargarSalas}
-              className="px-5 py-2.5 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-semibold rounded-xl text-xs transition-all"
+              className="mt-2 font-bold underline underline-offset-2"
             >
               Reintentar
             </button>
           </div>
-        ) : filteredSalas.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm">
-            <div className="text-4xl mb-3">📚</div>
-            <h2 className="text-lg font-bold text-slate-800 mb-2">
-              {salas.length === 0
-                ? 'Todavía no hay salas de estudio'
-                : 'No encontramos salas con esos filtros'}
-            </h2>
-            <p className="text-sm text-slate-500 mb-5">
-              {salas.length === 0
-                ? 'Crea la primera sala y empieza a estudiar en equipo.'
-                : 'Prueba con otra asignatura, otro estado o borra la búsqueda.'}
-            </p>
-            {salas.length === 0 && (
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="px-5 py-2.5 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-semibold rounded-xl text-xs transition-all"
-              >
-                + Crear la primera sala
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredSalas.map((sala) => {
-              const isFull = sala.participantesActuales >= sala.cupoMaximo;
-              const uniendo = uniendoId === sala.id;
-              return (
+        )}
+
+        {/* Tarjetas */}
+        <div className="mt-6">
+          {cargando ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map((item) => (
                 <div
-                  key={sala.id}
-                  className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col justify-between"
+                  key={item}
+                  className="h-72 animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white"
                 >
-                  <div>
-                    <div className="h-40 w-full relative overflow-hidden bg-slate-100">
-                      <img
-                        src={imagenDeAsignatura(sala.asignatura)}
-                        alt={sala.titulo}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      />
-                      <div className="absolute top-3 left-3">
-                        <span className="bg-white/90 backdrop-blur-xs text-[#0B4FC4] font-bold text-[11px] px-3 py-1 rounded-full shadow-xs">
-                          📖 {sala.asignatura}
-                        </span>
-                      </div>
-                      <div className="absolute top-3 right-3">
-                        <span
-                          className={`text-[11px] font-bold px-3 py-1 rounded-full shadow-xs flex items-center gap-1 ${
-                            sala.estado === 'Activa'
-                              ? 'bg-emerald-500 text-white'
-                              : 'bg-blue-600 text-white'
-                          }`}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                          {sala.estado}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-5">
-                      <h3 className="text-lg font-bold text-slate-800 mb-1 leading-tight">
-                        {sala.titulo}
-                      </h3>
-                      <p className="text-xs text-slate-500 mb-3 line-clamp-1">
-                        {sala.tema}
-                      </p>
-                      <p className="text-xs font-medium text-slate-600 mb-4">
-                        Anfitrión/a:{' '}
-                        <span className="text-slate-800 font-semibold">
-                          {sala.anfitrion.nombre}
-                        </span>
-                      </p>
-                    </div>
+                  <div className="h-1.5 bg-slate-200" />
+                  <div className="space-y-3 p-5">
+                    <div className="h-5 w-1/3 rounded bg-slate-100" />
+                    <div className="h-5 w-4/5 rounded bg-slate-200" />
+                    <div className="h-3 w-2/3 rounded bg-slate-100" />
+                    <div className="h-12 w-full rounded bg-slate-100" />
+                    <div className="h-8 w-full rounded bg-slate-100" />
                   </div>
+                </div>
+              ))}
+            </div>
+          ) : filtradas.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-14 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-2xl">
+                🔎
+              </div>
+              <h2 className="mt-3 text-base font-bold text-slate-800">
+                {salas.length === 0
+                  ? 'Todavía no hay salas de estudio'
+                  : 'No encontramos salas con esos filtros'}
+              </h2>
+              <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                {salas.length === 0
+                  ? 'Crea la primera sala y empieza a estudiar en equipo.'
+                  : 'Prueba con otra materia, otro estado o borra la búsqueda.'}
+              </p>
+              <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
+                {hayFiltrosActivos && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBusqueda('');
+                      setFiltroEstado('Todas');
+                      setFiltroMateria('Todas');
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-slate-300"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={abrirModalCrear}
+                  className="rounded-xl bg-[#0B4FC4] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#093fa3]"
+                >
+                  + Crear sala
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="mb-3 text-xs font-semibold text-slate-400">
+                {filtradas.length}{' '}
+                {filtradas.length === 1 ? 'sala encontrada' : 'salas encontradas'}
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {filtradas.map((sala) => {
+                  const color = colorDeMateria(sala.asignatura);
+                  const llena = sala.participantesActuales >= sala.cupoMaximo;
+                  const uniendo = uniendoId === sala.id;
+                  const progreso = Math.min(
+                    100,
+                    Math.round(
+                      (sala.participantesActuales / Math.max(1, sala.cupoMaximo)) *
+                        100
+                    )
+                  );
+                  const esPrivada = sala.privacidad === 'Privada';
 
-                  <div className="p-5 pt-0 border-t border-slate-100 mt-auto">
-                    <div className="flex items-center justify-between mb-4 pt-4 text-xs text-slate-500">
-                      <span className="flex items-center gap-1.5">
-                        👥 {sala.participantesActuales}/{sala.cupoMaximo} participantes
-                      </span>
+                  return (
+                    <article
+                      key={sala.id}
+                      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                    >
+                      <div className={`h-1.5 w-full ${color.franja}`} />
+
+                      <div className="flex flex-1 flex-col p-5">
+                        <div className="flex items-start justify-between gap-2">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${color.chip}`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${color.punto}`}
+                            />
+                            {sala.asignatura}
+                          </span>
+
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ring-1 ring-inset ${
+                                sala.estado === 'Activa'
+                                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                                  : 'bg-blue-50 text-[#0B4FC4] ring-blue-200'
+                              }`}
+                            >
+                              {sala.estado === 'Activa' ? (
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                              ) : (
+                                <IconoCalendario className="h-3 w-3" />
+                              )}
+                              {sala.estado === 'Activa' ? 'En vivo' : 'Programada'}
+                            </span>
+                            {esPrivada && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400"
+                                title="Sala privada"
+                              >
+                                <IconoCandado className="h-3 w-3" />
+                                Privada
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {sala.estado === 'Programada' &&
+                          sala.programadaEn && (
+                            <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                              <IconoCalendario className="h-3.5 w-3.5 text-[#0B4FC4]" />
+                              {formatearFechaProgramada(sala.programadaEn)}
+                            </p>
+                          )}
+
+                        <h2 className="mt-2 line-clamp-2 text-base font-bold leading-snug text-slate-900">
+                          {sala.titulo}
+                        </h2>
+                        <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-[#0B4FC4]">
+                          {sala.tema}
+                        </p>
+                        <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-xs leading-relaxed text-slate-500">
+                          {sala.descripcion}
+                        </p>
+
+                        <div className="mt-4 flex items-center gap-2">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-600">
+                            {inicialesDe(sala.anfitrion.nombre)}
+                          </span>
+                          <span className="min-w-0 text-xs text-slate-500">
+                            <span className="block text-[10px] uppercase tracking-wide text-slate-400">
+                              Anfitrión
+                            </span>
+                            <span className="block truncate font-semibold text-slate-700">
+                              {sala.anfitrion.nombre}
+                            </span>
+                          </span>
+                        </div>
+
+                        {esPrivada && sala.codigoAcceso && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copiarCodigo(
+                                sala.codigoAcceso ?? '',
+                                `sala-${sala.id}`
+                              )
+                            }
+                            className="mt-3 inline-flex w-full items-center justify-between gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:border-[#0B4FC4]/40 hover:text-[#0B4FC4]"
+                            title="Copiar código de acceso"
+                          >
+                            <span>
+                              Código:{' '}
+                              <span className="font-mono font-bold tracking-wider">
+                                {sala.codigoAcceso}
+                              </span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold">
+                              <IconoCopiar />
+                              {codigoCopiado === `sala-${sala.id}`
+                                ? 'Copiado'
+                                : 'Copiar'}
+                            </span>
+                          </button>
+                        )}
+
+                        <div className="mt-auto pt-4">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                            <span>Cupo</span>
+                            <span>
+                              {sala.participantesActuales}/{sala.cupoMaximo}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-full rounded-full ${color.franja}`}
+                              style={{ width: `${progreso}%` }}
+                            />
+                          </div>
+
+                          <div className="mt-4 border-t border-slate-100 pt-3">
+                            {sala.participando || sala.esAnfitrion ? (
+                              <button
+                                type="button"
+                                onClick={() => handleEntrarSala(sala)}
+                                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-[#0B4FC4] transition-colors hover:bg-blue-100"
+                              >
+                                Ya estás en esta sala
+                                <span aria-hidden="true">→</span>
+                              </button>
+                            ) : llena ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="w-full cursor-not-allowed rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-400"
+                              >
+                                Cupo lleno
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleEntrarSala(sala)}
+                                disabled={uniendo}
+                                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:border-[#0B4FC4]/40 hover:text-[#0B4FC4] disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {uniendo ? 'Entrando…' : esPrivada ? 'Unirme con código' : 'Unirme'}
+                                {!uniendo && <span aria-hidden="true">→</span>}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Modal crear sala */}
+      {modalCrear && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <button
+            type="button"
+            aria-label="Cerrar modal"
+            onClick={cerrarModalCrear}
+            className="absolute inset-0 cursor-default"
+          />
+          <div className="relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-w-2xl sm:rounded-2xl">
+            <header className="shrink-0 border-b border-slate-100 px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-black tracking-tight text-slate-900">
+                    {salaCreada ? 'Tu sala está lista' : 'Crear una sala de estudio'}
+                  </h2>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {salaCreada
+                      ? 'Comparte el acceso con tus compañeros y empiecen a estudiar.'
+                      : 'Reúnete con compañeros de tu materia y resuelvan dudas juntos.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={cerrarModalCrear}
+                  disabled={creando}
+                  className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
+              </div>
+            </header>
+
+            {salaCreada ? (
+              <>
+                <div className="flex-1 overflow-y-auto px-5 py-8">
+                  <div className="mx-auto max-w-md text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-3xl ring-1 ring-inset ring-emerald-100">
+                      ✓
                     </div>
+                    <h3 className="mt-4 text-xl font-black text-slate-900">
+                      {salaCreada.titulo}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {salaCreada.asignatura} · {salaCreada.tema}
+                    </p>
 
-                    {isFull && !sala.participando ? (
+                    {salaCreada.estado === 'Programada' &&
+                      salaCreada.programadaEn && (
+                        <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-[#0B4FC4]">
+                          <IconoCalendario className="h-3.5 w-3.5" />
+                          {formatearFechaProgramada(salaCreada.programadaEn)}
+                        </p>
+                      )}
+
+                    {salaCreada.privacidad === 'Privada' &&
+                      salaCreada.codigoAcceso && (
+                        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            Código de acceso
+                          </p>
+                          <div className="mt-2 flex items-center justify-center gap-3">
+                            <span className="font-mono text-2xl font-black tracking-[0.2em] text-[#0B4FC4]">
+                              {salaCreada.codigoAcceso}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copiarCodigo(
+                                  salaCreada.codigoAcceso ?? '',
+                                  'creada'
+                                )
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 transition-colors hover:border-[#0B4FC4]/40 hover:text-[#0B4FC4]"
+                            >
+                              <IconoCopiar />
+                              {codigoCopiado === 'creada' ? 'Copiado' : 'Copiar'}
+                            </button>
+                          </div>
+                          <p className="mt-2 text-[11px] text-slate-500">
+                            Solo entra quien tenga este código o el enlace de la
+                            sala.
+                          </p>
+                        </div>
+                      )}
+
+                    <p className="mt-5 text-xs leading-relaxed text-slate-500">
+                      {salaCreada.estado === 'Programada'
+                        ? 'La sala se activará automáticamente en la fecha y hora elegidas.'
+                        : 'La sala ya está activa. Puedes entrar ahora mismo.'}
+                    </p>
+                  </div>
+                </div>
+
+                <footer className="shrink-0 border-t border-slate-100 bg-slate-50 px-5 py-4">
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={cerrarModalCrear}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100"
+                    >
+                      Cerrar
+                    </button>
+                    {salaCreada.estado === 'Activa' && (
                       <button
-                        disabled
-                        className="w-full py-3 bg-slate-200 text-slate-500 font-bold rounded-xl text-xs cursor-not-allowed"
+                        type="button"
+                        onClick={() => {
+                          const id = salaCreada.id;
+                          setModalCrear(false);
+                          reiniciarFormulario();
+                          router.push(`/salas/${id}`);
+                        }}
+                        className="rounded-xl bg-[#0B4FC4] px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#093fa3]"
                       >
-                        Cupo lleno
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleEntrarSala(sala)}
-                        disabled={uniendo}
-                        className="w-full py-3 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-bold rounded-xl text-xs shadow-sm shadow-blue-500/20 transition-all text-center disabled:opacity-70 disabled:cursor-not-allowed"
-                      >
-                        {uniendo
-                          ? 'Entrando…'
-                          : sala.participando
-                            ? 'Entrar'
-                            : 'Unirse'}
+                        Entrar a la sala
                       </button>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
+                </footer>
+              </>
+            ) : (
+              <form onSubmit={handleCrearSala} className="flex min-h-0 flex-1 flex-col">
+                <div className="flex-1 overflow-y-auto px-5 py-5">
+                  <div className="space-y-5">
+                    <div>
+                      <label
+                        htmlFor="sala-titulo"
+                        className="mb-1.5 block text-xs font-bold text-slate-700"
+                      >
+                        Título de la sala <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="sala-titulo"
+                        type="text"
+                        required
+                        maxLength={100}
+                        value={titulo}
+                        onChange={(evento) => setTitulo(evento.target.value)}
+                        placeholder="Ej.: Repaso de límites para el parcial"
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+                      />
+                    </div>
 
-      {/* Modal Crear Sala */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-              <h2 className="text-lg font-bold text-[#0B4FC4]">
-                Crear Nueva Sala de Estudio
-              </h2>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label
+                          htmlFor="sala-asignatura"
+                          className="mb-1.5 block text-xs font-bold text-slate-700"
+                        >
+                          Asignatura <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          id="sala-asignatura"
+                          required
+                          value={asignatura}
+                          onChange={(evento) =>
+                            setAsignatura(evento.target.value as Asignatura | '')
+                          }
+                          className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+                        >
+                          <option value="">Elige una asignatura…</option>
+                          {ASIGNATURAS.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="sala-tema"
+                          className="mb-1.5 block text-xs font-bold text-slate-700"
+                        >
+                          Tema <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          id="sala-tema"
+                          type="text"
+                          required
+                          maxLength={140}
+                          value={tema}
+                          onChange={(evento) => setTema(evento.target.value)}
+                          placeholder="Ej.: Límites y continuidad"
+                          className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="sala-descripcion"
+                        className="mb-1.5 block text-xs font-bold text-slate-700"
+                      >
+                        Descripción <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        id="sala-descripcion"
+                        required
+                        rows={3}
+                        maxLength={600}
+                        value={descripcion}
+                        onChange={(evento) => setDescripcion(evento.target.value)}
+                        placeholder="Cuéntales a tus compañeros de qué trata la sesión…"
+                        className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+                      />
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        ¿Qué van a hacer? ¿Qué deben traer?
+                      </p>
+                    </div>
+
+                    <fieldset>
+                      <legend className="mb-2 text-xs font-bold text-slate-700">
+                        ¿Cuándo?
+                      </legend>
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => setCuando('ahora')}
+                          aria-pressed={cuando === 'ahora'}
+                          className={`rounded-xl border p-3.5 text-left transition-colors ${
+                            cuando === 'ahora'
+                              ? 'border-[#0B4FC4] bg-blue-50 ring-1 ring-[#0B4FC4]/20'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                            <span
+                              className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                                cuando === 'ahora'
+                                  ? 'border-[#0B4FC4] bg-[#0B4FC4]'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {cuando === 'ahora' && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                              )}
+                            </span>
+                            Ahora mismo
+                          </span>
+                          <span className="mt-1 block pl-6 text-[11px] leading-relaxed text-slate-500">
+                            La sala queda abierta de inmediato.
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setCuando('programar')}
+                          aria-pressed={cuando === 'programar'}
+                          className={`rounded-xl border p-3.5 text-left transition-colors ${
+                            cuando === 'programar'
+                              ? 'border-[#0B4FC4] bg-blue-50 ring-1 ring-[#0B4FC4]/20'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                            <span
+                              className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                                cuando === 'programar'
+                                  ? 'border-[#0B4FC4] bg-[#0B4FC4]'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {cuando === 'programar' && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                              )}
+                            </span>
+                            Programarla
+                          </span>
+                          <span className="mt-1 block pl-6 text-[11px] leading-relaxed text-slate-500">
+                            Elige día y hora; avisaremos a quien siga la materia.
+                          </span>
+                        </button>
+                      </div>
+
+                      {cuando === 'programar' && (
+                        <div className="mt-3 grid gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3 sm:grid-cols-2">
+                          <div>
+                            <label
+                              htmlFor="sala-fecha"
+                              className="mb-1 block text-[11px] font-bold text-slate-600"
+                            >
+                              Fecha <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              id="sala-fecha"
+                              type="date"
+                              required
+                              min={fechaHoyLocal()}
+                              value={fecha}
+                              onChange={(evento) => setFecha(evento.target.value)}
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-[#0B4FC4] focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="sala-hora"
+                              className="mb-1 block text-[11px] font-bold text-slate-600"
+                            >
+                              Hora <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              id="sala-hora"
+                              type="time"
+                              required
+                              value={hora}
+                              onChange={(evento) => setHora(evento.target.value)}
+                              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-[#0B4FC4] focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </fieldset>
+
+                    <fieldset>
+                      <legend className="mb-2 text-xs font-bold text-slate-700">
+                        Privacidad
+                      </legend>
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => setPrivacidad('publica')}
+                          aria-pressed={privacidad === 'publica'}
+                          className={`rounded-xl border p-3.5 text-left transition-colors ${
+                            privacidad === 'publica'
+                              ? 'border-[#0B4FC4] bg-blue-50 ring-1 ring-[#0B4FC4]/20'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                            <span
+                              className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                                privacidad === 'publica'
+                                  ? 'border-[#0B4FC4] bg-[#0B4FC4]'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {privacidad === 'publica' && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                              )}
+                            </span>
+                            Pública
+                          </span>
+                          <span className="mt-1 block pl-6 text-[11px] leading-relaxed text-slate-500">
+                            Cualquier estudiante la encuentra y se une.
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setPrivacidad('privada')}
+                          aria-pressed={privacidad === 'privada'}
+                          className={`rounded-xl border p-3.5 text-left transition-colors ${
+                            privacidad === 'privada'
+                              ? 'border-[#0B4FC4] bg-blue-50 ring-1 ring-[#0B4FC4]/20'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                            <span
+                              className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                                privacidad === 'privada'
+                                  ? 'border-[#0B4FC4] bg-[#0B4FC4]'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {privacidad === 'privada' && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                              )}
+                            </span>
+                            Privada
+                          </span>
+                          <span className="mt-1 block pl-6 text-[11px] leading-relaxed text-slate-500">
+                            Solo entra quien tenga el código o el enlace.
+                          </span>
+                        </button>
+                      </div>
+                    </fieldset>
+
+                    <div>
+                      <div className="flex items-end justify-between gap-3">
+                        <label
+                          htmlFor="sala-cupo"
+                          className="text-xs font-bold text-slate-700"
+                        >
+                          Cupo máximo
+                        </label>
+                        <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-[#0B4FC4]">
+                          {cupo} {cupo === 1 ? 'persona' : 'personas'}
+                        </span>
+                      </div>
+                      <input
+                        id="sala-cupo"
+                        type="range"
+                        min={2}
+                        max={50}
+                        step={1}
+                        value={cupo}
+                        onChange={(evento) => setCupo(Number(evento.target.value))}
+                        className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-[#0B4FC4]"
+                      />
+                      <div className="mt-1 flex justify-between text-[10px] font-semibold text-slate-400">
+                        <span>2</span>
+                        <span>50</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        Para trabajar bien en grupo, 4 a 10 personas funciona mejor.
+                      </p>
+                    </div>
+
+                    {modalError && (
+                      <div
+                        role="alert"
+                        className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-xs text-red-700"
+                      >
+                        {modalError}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <footer className="shrink-0 border-t border-slate-100 bg-slate-50 px-5 py-4">
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={cerrarModalCrear}
+                      disabled={creando}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-60"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={creando}
+                      className="rounded-xl bg-[#0B4FC4] px-5 py-2.5 text-xs font-bold text-white shadow-sm shadow-blue-500/20 transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {creando ? 'Creando…' : 'Crear sala'}
+                    </button>
+                  </div>
+                </footer>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal acceso privado */}
+      {accesoAbierto && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Cerrar"
+            onClick={cerrarAcceso}
+            className="absolute inset-0 cursor-default"
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-base font-black text-slate-900">
+                  {salaDestino ? 'Sala privada' : 'Acceder con código'}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {salaDestino
+                    ? `Ingresa el código para unirte a “${salaDestino.titulo}”.`
+                    : 'Escribe el código que te compartió el anfitrión.'}
+                </p>
+              </div>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  resetFormulario();
-                }}
-                className="text-slate-400 hover:text-slate-600 font-bold text-lg"
+                type="button"
+                onClick={cerrarAcceso}
+                disabled={codigoCargando}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
                 aria-label="Cerrar"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCrearSala} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Título de la Sala
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={100}
-                  placeholder="Ej. Derivadas y optimización"
-                  value={nuevoTitulo}
-                  onChange={(e) => setNuevoTitulo(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]"
-                />
-              </div>
+            <form onSubmit={handleAcceso} className="px-5 py-5">
+              <label
+                htmlFor="codigo-acceso"
+                className="mb-1.5 block text-xs font-bold text-slate-700"
+              >
+                Código de acceso
+              </label>
+              <input
+                id="codigo-acceso"
+                value={codigo}
+                onChange={(evento) =>
+                  setCodigo(evento.target.value.toUpperCase().slice(0, 8))
+                }
+                placeholder="Ej.: K7M2QX"
+                autoFocus
+                maxLength={8}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-center font-mono text-lg font-bold tracking-[0.25em] text-slate-800 placeholder:font-sans placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+              />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Asignatura
-                  </label>
-                  <select
-                    value={nuevaAsignatura}
-                    onChange={(e) =>
-                      setNuevaAsignatura(e.target.value as Asignatura)
-                    }
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]"
-                  >
-                    {ASIGNATURAS.map((asignatura) => (
-                      <option key={asignatura} value={asignatura}>
-                        {asignatura}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Estado
-                  </label>
-                  <select
-                    value={nuevoEstado}
-                    onChange={(e) =>
-                      setNuevoEstado(e.target.value as 'Activa' | 'Programada')
-                    }
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]"
-                  >
-                    <option value="Activa">Activa</option>
-                    <option value="Programada">Programada</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Tema Principal
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={140}
-                  placeholder="Ej. Máximos y mínimos en problemas aplicados"
-                  value={nuevoTema}
-                  onChange={(e) => setNuevoTema(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Descripción Breve
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  maxLength={600}
-                  placeholder="Describe el objetivo de la sesión y materiales recomendados..."
-                  value={nuevaDesc}
-                  onChange={(e) => setNuevaDesc(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]"
-                />
-              </div>
-
-              {modalError && (
+              {codigoError && (
                 <div
                   role="alert"
-                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700"
+                  className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700"
                 >
-                  {modalError}
+                  {codigoError}
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    resetFormulario();
-                  }}
-                  disabled={creating}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors disabled:opacity-70"
+                  onClick={cerrarAcceso}
+                  disabled={codigoCargando}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-60"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={creating}
-                  className="px-5 py-2 bg-[#0B4FC4] hover:bg-[#093fa3] text-white font-bold rounded-xl text-xs shadow-md shadow-blue-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                  disabled={codigoCargando}
+                  className="rounded-xl bg-[#0B4FC4] px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {creating ? 'Creando…' : 'Crear Sala'}
+                  {codigoCargando ? 'Verificando…' : 'Entrar a la sala'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+    </AppShell>
   );
 }

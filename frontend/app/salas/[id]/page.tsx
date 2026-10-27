@@ -94,6 +94,9 @@ export default function SalaEnVivoPage() {
   const [errorSala, setErrorSala] = useState('');
   const [errorAccion, setErrorAccion] = useState('');
   const [uniendose, setUniendose] = useState(false);
+  const [modalCodigo, setModalCodigo] = useState(false);
+  const [codigoAcceso, setCodigoAcceso] = useState('');
+  const [errorCodigo, setErrorCodigo] = useState('');
   const [saliendo, setSaliendo] = useState(false);
   const [cronometro, setCronometro] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
@@ -406,21 +409,41 @@ export default function SalaEnVivoPage() {
     return `${pad(h)}:${pad(m)}:${pad(s)}`;
   };
 
-  const handleUnirse = async () => {
+  const handleUnirse = async (codigoIngresado?: string) => {
     if (!token || !sala) return;
 
+    const requiereCodigo = sala.privacidad === 'Privada' && !sala.esAnfitrion;
+    const codigo = (codigoIngresado ?? '').trim().toUpperCase();
+
+    if (requiereCodigo && !codigo) {
+      setErrorAccion('');
+      setErrorCodigo('');
+      setModalCodigo(true);
+      return;
+    }
+
     setErrorAccion('');
+    setErrorCodigo('');
     setUniendose(true);
     try {
       await apiRequest(`/api/salas/${sala.id}/unirse`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: codigo ? JSON.stringify({ codigoAcceso: codigo }) : undefined,
       });
+      setModalCodigo(false);
+      setCodigoAcceso('');
       await cargarSala();
     } catch (err) {
-      setErrorAccion(
-        err instanceof Error ? err.message : 'No se pudo entrar a la sala.'
-      );
+      const mensaje =
+        err instanceof Error ? err.message : 'No se pudo entrar a la sala.';
+      setErrorAccion(mensaje);
+      if (requiereCodigo) {
+        setErrorCodigo(mensaje);
+      }
     } finally {
       setUniendose(false);
     }
@@ -854,12 +877,18 @@ export default function SalaEnVivoPage() {
               </button>
             ) : (
               <button
-                onClick={handleUnirse}
+                onClick={() => handleUnirse()}
                 disabled={uniendose}
                 className="flex items-center gap-2 rounded-xl bg-[#0B4FC4] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
               >
                 <span aria-hidden="true">+</span>
-                <span>{uniendose ? 'Entrando…' : 'Unirse a la Sala'}</span>
+                <span>
+                  {uniendose
+                    ? 'Entrando…'
+                    : sala.privacidad === 'Privada' && !sala.esAnfitrion
+                      ? 'Unirse con código'
+                      : 'Unirse a la Sala'}
+                </span>
               </button>
             )}
           </div>
@@ -965,11 +994,15 @@ export default function SalaEnVivoPage() {
               {!sala.participando && (
                 <button
                   type="button"
-                  onClick={handleUnirse}
+                  onClick={() => handleUnirse()}
                   disabled={uniendose}
                   className="rounded-xl bg-[#0B4FC4] px-3 py-2 text-[11px] font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {uniendose ? 'Entrando…' : 'Unirme a la sala'}
+                  {uniendose
+                    ? 'Entrando…'
+                    : sala.privacidad === 'Privada' && !sala.esAnfitrion
+                      ? 'Unirme con código'
+                      : 'Unirme a la sala'}
                 </button>
               )}
 
@@ -1659,6 +1692,112 @@ export default function SalaEnVivoPage() {
           </aside>
         </div>
       </main>
+
+      {/* Acceso con código para salas privadas */}
+      {modalCodigo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="Cerrar"
+            onClick={() => {
+              if (uniendose) return;
+              setModalCodigo(false);
+              setErrorCodigo('');
+              setErrorAccion('');
+              setCodigoAcceso('');
+            }}
+            className="absolute inset-0 cursor-default"
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div className="min-w-0">
+                <h2 className="text-base font-black text-slate-900">
+                  Sala privada
+                </h2>
+                <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                  Ingresa el código para unirte a “{sala.titulo}”. Pídeselo al
+                  anfitrión.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalCodigo(false);
+                  setErrorCodigo('');
+                  setErrorAccion('');
+                  setCodigoAcceso('');
+                }}
+                disabled={uniendose}
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(evento) => {
+                evento.preventDefault();
+                void handleUnirse(codigoAcceso);
+              }}
+              className="px-5 py-5"
+            >
+              <label
+                htmlFor="codigo-sala"
+                className="mb-1.5 block text-xs font-bold text-slate-700"
+              >
+                Código de acceso
+              </label>
+              <input
+                id="codigo-sala"
+                value={codigoAcceso}
+                onChange={(evento) =>
+                  setCodigoAcceso(
+                    evento.target.value.toUpperCase().slice(0, 8)
+                  )
+                }
+                placeholder="Ej.: K7M2QX"
+                autoFocus
+                maxLength={8}
+                autoComplete="off"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-center font-mono text-lg font-bold tracking-[0.25em] text-slate-800 placeholder:font-sans placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
+              />
+
+              {errorCodigo && (
+                <div
+                  role="alert"
+                  className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700"
+                >
+                  {errorCodigo}
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalCodigo(false);
+                    setErrorCodigo('');
+                    setErrorAccion('');
+                    setCodigoAcceso('');
+                  }}
+                  disabled={uniendose}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={uniendose || codigoAcceso.trim().length < 4}
+                  className="rounded-xl bg-[#0B4FC4] px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#093fa3] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {uniendose ? 'Verificando…' : 'Entrar a la sala'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

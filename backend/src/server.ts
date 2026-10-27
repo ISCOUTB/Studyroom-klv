@@ -60,7 +60,7 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
-    service: 'Campus Collaborative Study API',
+    service: 'StudyRoom API',
     timestamp: new Date().toISOString(),
   });
 });
@@ -125,7 +125,7 @@ iniciarSchedulerTutorias();
 httpServer.listen(PORT, () => {
   console.log('');
   console.log('============================================================');
-  console.log('  Campus Collaborative Study - API');
+  console.log('  StudyRoom - API');
   console.log(`  http://localhost:${PORT}`);
   console.log('============================================================');
   console.log('  Endpoints disponibles:');
