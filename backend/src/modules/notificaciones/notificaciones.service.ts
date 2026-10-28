@@ -13,7 +13,9 @@ export type TipoNotificacion =
   | 'TUTORIA_RECORDATORIO'
   | 'MONITOR_APROBADO'
   | 'MONITOR_RECHAZADO'
-  | 'SOLICITUD_MONITOR';
+  | 'SOLICITUD_MONITOR'
+  | 'FORO_RESPUESTA'
+  | 'FORO_ACEPTADA';
 
 export interface NotificacionPublica {
   id: string;

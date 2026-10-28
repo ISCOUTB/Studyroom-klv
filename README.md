@@ -3,6 +3,7 @@
 Plataforma colaborativa web (responsive desde 360px) para estudiantes de primeros semestres (Cálculo, Física, Álgebra, Estadística) que permite:
 1. **Unirse a salas de estudio simultáneo** y resolver ejercicios en conjunto con mensajería en tiempo real (< 2s) y control de cupo configurable (2 a 50 participantes, 10 por defecto).
 2. **Agendar tutorías con estudiantes avanzados (monitores)**, seleccionando modalidad (Virtual / Presencial con ubicación en campus ej. "Bloque C · Salón 204") y bloques de disponibilidad horaria.
+3. **Publicar dudas en un foro académico**, filtrarlas por asignatura, tema y estado, y marcar la respuesta que resolvió la pregunta.
 
 Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206).
 
@@ -19,7 +20,7 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ## Estructura del Stack
 
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
-- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales`, las tutorías en `/api/tutorias`, las notificaciones en `/api/notificaciones` y la administración de monitores en `/api/admin/monitores`.
+- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales`, las tutorías en `/api/tutorias`, el foro de dudas en `/api/foro`, las notificaciones en `/api/notificaciones` y la administración de monitores en `/api/admin/monitores`.
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
 - **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con enlace válido por 24 h y recuperación de contraseña con enlace válido por 1 h.
 - **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del servicio para desarrollo.
@@ -156,10 +157,12 @@ Todas las pantallas autenticadas comparten el componente `AppShell`: barra later
 
 | Ruta | Descripción |
 | --- | --- |
-| `/inicio` | Panel de bienvenida con saludo por hora, salas en vivo, próximas tutorías y acceso rápido a Salas, Tutorías y Foro. Es la ruta posterior al inicio de sesión. |
+| `/inicio` | Panel de bienvenida con saludo por hora, salas en vivo, próximas tutorías y la sección real **Dudas sin resolver** (máximo 3 preguntas del foro, con acceso al detalle y al modal de creación). Es la ruta posterior al inicio de sesión. |
 | `/salas` | Listado real desde la API con búsqueda por título/tema/descripción, segmentado Todas/En vivo/Programadas, chips por materia, tarjetas con cupo, fecha programada, candado de privacidad y código para el anfitrión. Incluye el modal de creación y el acceso mediante código. |
 | `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye mensajería en tiempo real con historial y presencia, y la pestaña de materiales con carga, descarga y eliminación de archivos. |
-| `/foro`, `/repositorio`, `/banco-ejercicios` | Páginas “Próximamente” dentro de `AppShell` para las funcionalidades en preparación. |
+| `/foro` | Foro de dudas con buscador, filtro por tema, chips de asignatura, pestañas por estado, tarjetas clicables y modal de creación. |
+| `/foro/[id]` | Detalle de una pregunta con sus respuestas, aceptación de la respuesta correcta y acciones de eliminación según permisos. |
+| `/repositorio`, `/banco-ejercicios` | Páginas “Próximamente” dentro de `AppShell` para las funcionalidades en preparación. |
 | `/tutorias`, `/perfil`, `/perfil/editar`, `/perfil/monitor`, `/admin/monitores` | Conservan su contenido actual y ahora se muestran dentro de `AppShell`. |
 
 ---
@@ -202,6 +205,52 @@ Cada sala tiene una pestaña **Materiales** donde los participantes activos pued
 - **Descarga:** el navegador solicita el archivo con el header `Authorization` y lo guarda con su nombre original.
 
 La ruta de almacenamiento se puede cambiar con la variable opcional `UPLOADS_DIR` en `backend/.env`. Si se usa una ruta relativa, se resuelve desde la carpeta `backend`. En producción conviene respaldar esa carpeta o migrarla a un almacenamiento de objetos.
+
+---
+
+## Foro de Dudas (RF-16)
+
+Espacio asíncrono para que los estudiantes publiquen sus dudas y reciban respuestas de compañeros y monitores, sin necesidad de coincidir en horario. Cada pregunta pertenece a una asignatura, puede llevar un tema opcional y queda **resuelta** cuando su autor acepta una respuesta.
+
+### Reglas
+
+- Solo los usuarios autenticados pueden listar, publicar, responder o consultar el foro.
+- **Aceptar una respuesta:** únicamente el autor de la pregunta. Al hacerlo se desmarcan las demás respuestas, la elegida queda como aceptada y la pregunta pasa a `resuelta = true`.
+- **Eliminar:** el autor de la pregunta o de la respuesta, o un usuario con rol `ADMINISTRADOR`. Al borrar una pregunta se eliminan sus respuestas en cascada; al borrar la respuesta aceptada, la pregunta vuelve a quedar sin resolver.
+- **Límites:** título 150 caracteres, descripción 1000, tema 80 y respuesta 1000. El título requiere al menos 5 caracteres, la descripción 10 y la respuesta 3.
+- **Orden del listado:** primero las preguntas sin resolver y, dentro de cada grupo, las más recientes. En el detalle, la respuesta aceptada aparece primero.
+- **Notificaciones:** al responder una pregunta ajena se avisa al autor (`FORO_RESPUESTA`); al aceptar una respuesta se avisa a quien la escribió (`FORO_ACEPTADA`).
+
+### API del foro
+
+Todas las rutas requieren `Authorization: Bearer <token>`.
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `GET` | `/api/foro` | Lista las preguntas con autor, número de respuestas y fecha. Acepta `?asignatura=`, `?estado=todas\|sin-resolver\|resueltas`, `?q=` (título o descripción) y `?tema=` (búsqueda parcial sin distinguir mayúsculas). |
+| `POST` | `/api/foro` | Publica una pregunta (`titulo`, `descripcion`, `asignatura`, `tema` opcional). |
+| `GET` | `/api/foro/:id` | Devuelve la pregunta completa y sus respuestas, con la aceptada primero. |
+| `POST` | `/api/foro/:id/respuestas` | Agrega una respuesta (`contenido`). |
+| `PATCH` | `/api/foro/:id/respuestas/:respuestaId/aceptar` | Marca una respuesta como aceptada y la pregunta como resuelta. Solo el autor de la pregunta. |
+| `DELETE` | `/api/foro/:id` | Elimina una pregunta y sus respuestas. Autor o administrador. |
+| `DELETE` | `/api/foro/:id/respuestas/:respuestaId` | Elimina una respuesta. Autor de la respuesta o administrador. |
+
+### Pantallas del foro
+
+| Ruta | Descripción |
+| --- | --- |
+| `/foro` | Listado con buscador por palabra clave, filtro por tema, chips de asignatura (Todas + 5 materias), pestañas Todas/Sin resolver/Resueltas y tarjetas clicables con etiqueta de asignatura, tema, autor, tiempo relativo, contador de respuestas e insignia verde "Resuelta". Incluye el modal "Hacer una pregunta". |
+| `/foro/[id]` | Pregunta completa, respuestas (la aceptada destacada en verde), caja para responder y botón "Marcar como respuesta" visible solo para el autor. Permite eliminar la pregunta o las respuestas según los permisos. |
+
+La sección **Dudas sin resolver** de `/inicio` consume `GET /api/foro?estado=sin-resolver`, muestra como máximo 3 preguntas y su botón "Hacer una pregunta" abre el mismo modal de creación.
+
+### Persistencia
+
+- Modelos Prisma `Pregunta` y `Respuesta`, mapeados a las tablas `preguntas_foro` y `respuestas_foro`.
+- `Pregunta`: `id`, `autor_id`, `titulo` (150), `descripcion` (1000), `asignatura`, `tema` (80, opcional), `resuelta` (por defecto `false`) y `creado_en`.
+- `Respuesta`: `id`, `pregunta_id` (cascada), `autor_id`, `contenido` (1000), `aceptada` (por defecto `false`) y `creado_en`.
+- Índices para el listado por asignatura/estado/fecha y para las respuestas por pregunta/fecha.
+- Migración: `prisma/migrations/20261028000000_foro_dudas`, que además agrega los tipos `FORO_RESPUESTA` y `FORO_ACEPTADA` al enum de notificaciones.
 
 ---
 
@@ -267,7 +316,7 @@ Los enlaces a **Tutorías** están disponibles en la barra lateral de todas las 
 
 ## Notificaciones en Tiempo Real
 
-Cada cambio relevante del ciclo de tutorías y de las postulaciones de monitor genera una **notificación persistente** en PostgreSQL. El usuario la recibe al instante si tiene la aplicación abierta y puede consultarla después desde la campanita.
+Cada cambio relevante del ciclo de tutorías, de las postulaciones de monitor y de la actividad del foro genera una **notificación persistente** en PostgreSQL. El usuario la recibe al instante si tiene la aplicación abierta y puede consultarla después desde la campanita.
 
 ### Experiencia de usuario
 
@@ -275,7 +324,7 @@ Cada cambio relevante del ciclo de tutorías y de las postulaciones de monitor g
 - **Panel desplegable** con las últimas 30 notificaciones, su tipo, mensaje, fecha relativa y estado de lectura.
 - **Aviso flotante (toast)** al recibir una notificación mientras la aplicación está abierta.
 - **Marcado individual o masivo** como leído, con actualización inmediata del contador.
-- **Enlaces de destino:** las tutorías abren `/tutorias#mis-tutorias` y las postulaciones abren `/admin/monitores` o `/perfil/monitor`, según corresponda.
+- **Enlaces de destino:** las tutorías abren `/tutorias#mis-tutorias`, las postulaciones abren `/admin/monitores` o `/perfil/monitor` y los avisos del foro abren la pregunta correspondiente en `/foro/[id]`.
 - Las pantallas abiertas **se actualizan solas** al recibir un aviso (lista de tutorías, postulaciones o perfil del monitor).
 - La campanita usa variante clara en las pantallas blancas y variante oscura dentro de la sala en vivo. El panel y el toast se adaptan desde 360 px.
 
@@ -293,6 +342,8 @@ Cada cambio relevante del ciclo de tutorías y de las postulaciones de monitor g
 | `SOLICITUD_MONITOR` | Administradores | Un estudiante envía o actualiza su postulación de monitor. |
 | `MONITOR_APROBADO` | Solicitante | Un administrador aprueba su postulación. |
 | `MONITOR_RECHAZADO` | Solicitante | Un administrador rechaza su postulación. |
+| `FORO_RESPUESTA` | Autor de la pregunta | Otro usuario responde su pregunta del foro. |
+| `FORO_ACEPTADA` | Autor de la respuesta | El autor de la pregunta marca su respuesta como aceptada. |
 
 La expiración corre en cada ciclo del scheduler y también al consultar o responder tutorías. Usa un `updateMany` condicionado por estado para **no duplicar avisos** si dos procesos coinciden. La creación de notificaciones es *best-effort*: si falla el aviso, la acción principal (agendar, aceptar, cancelar, etc.) no se interrumpe.
 

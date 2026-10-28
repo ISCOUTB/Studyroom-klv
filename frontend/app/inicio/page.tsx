@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
+import { ModalPregunta } from '@/components/foro/ModalPregunta';
 import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/api';
 import {
@@ -14,6 +16,10 @@ import {
   type Tutoria,
   formatearFechaHora,
 } from '@/lib/tutorias';
+import {
+  type PreguntaForo,
+  tiempoRelativoForo,
+} from '@/lib/foro';
 
 function saludoSegunHora(): string {
   const hora = new Date().getHours();
@@ -45,32 +51,57 @@ function IconoFlecha({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
+function IconoComentario({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5Z" />
+    </svg>
+  );
+}
+
 export default function InicioPage() {
   const { user, token, isLoading } = useAuth();
   const router = useRouter();
 
   const [salas, setSalas] = useState<Sala[]>([]);
   const [tutorias, setTutorias] = useState<Tutoria[]>([]);
+  const [dudas, setDudas] = useState<PreguntaForo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [uniendoId, setUniendoId] = useState<string | null>(null);
   const [accionError, setAccionError] = useState('');
+  const [modalPregunta, setModalPregunta] = useState(false);
 
   const cargar = useCallback(async () => {
     if (!token) return;
 
     try {
-      const [respuestaSalas, respuestaTutorias] = await Promise.all([
-        apiRequest<{ salas: Sala[] }>('/api/salas', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        apiRequest<{ tutorias: Tutoria[] }>('/api/tutorias', {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+      const [respuestaSalas, respuestaTutorias, respuestaForo] =
+        await Promise.all([
+          apiRequest<{ salas: Sala[] }>('/api/salas', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          apiRequest<{ tutorias: Tutoria[] }>('/api/tutorias', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          apiRequest<{ preguntas: PreguntaForo[] }>(
+            '/api/foro?estado=sin-resolver',
+            { headers: { Authorization: `Bearer ${token}` } }
+          ),
+        ]);
 
       setSalas(respuestaSalas.salas ?? []);
       setTutorias(respuestaTutorias.tutorias ?? []);
+      setDudas(respuestaForo.preguntas ?? []);
       setError('');
     } catch (err) {
       setError(
@@ -142,6 +173,11 @@ export default function InicioPage() {
     }
   };
 
+  const handlePreguntaCreada = (pregunta: PreguntaForo) => {
+    setModalPregunta(false);
+    router.push(`/foro/${pregunta.id}?creada=1`);
+  };
+
   if (isLoading || !user) return null;
 
   const nombre = user.nombre?.trim() || etiquetaRol(user.rol);
@@ -194,7 +230,7 @@ export default function InicioPage() {
               </button>
               <button
                 type="button"
-                onClick={() => router.push('/foro')}
+                onClick={() => setModalPregunta(true)}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
               >
                 Hacer una pregunta
@@ -450,50 +486,104 @@ export default function InicioPage() {
                 <h2 className="text-lg font-black tracking-tight text-slate-900">
                   Dudas sin resolver
                 </h2>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 ring-1 ring-inset ring-amber-200">
-                  Próximamente
-                </span>
+                <Link
+                  href="/foro"
+                  className="shrink-0 text-[11px] font-bold text-[#0B4FC4] hover:underline"
+                >
+                  Ver foro
+                </Link>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                El foro de preguntas estará disponible muy pronto.
+                Preguntas de tus compañeros que aún esperan una respuesta.
               </p>
 
-              <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-base shadow-sm">
-                    💬
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-700">
-                      Comparte tu duda con la comunidad
-                    </p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-                      Mientras abrimos el foro, puedes plantear tus preguntas en
-                      una sala de estudio o con un monitor.
-                    </p>
+              {cargando ? (
+                <div className="mt-4 space-y-2.5">
+                  {[1, 2].map((item) => (
+                    <div
+                      key={item}
+                      className="h-20 animate-pulse rounded-xl border border-slate-200 bg-slate-50"
+                    />
+                  ))}
+                </div>
+              ) : dudas.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-base shadow-sm">
+                      💬
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700">
+                        Aún no hay dudas sin resolver
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                        Comparte tu pregunta y deja que compañeros y monitores te
+                        ayuden.
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => router.push('/foro')}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 transition-colors hover:border-[#0B4FC4]/30 hover:text-[#0B4FC4]"
-                  >
-                    Ir al foro
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push('/salas')}
-                    className="rounded-lg px-3 py-1.5 text-[11px] font-bold text-[#0B4FC4] hover:underline"
-                  >
-                    Buscar una sala
-                  </button>
-                </div>
-              </div>
+              ) : (
+                <ul className="mt-4 space-y-2.5">
+                  {dudas.slice(0, 3).map((duda) => {
+                    const color = colorDeMateria(duda.asignatura);
+
+                    return (
+                      <li key={duda.id}>
+                        <Link
+                          href={`/foro/${duda.id}`}
+                          className="block rounded-xl border border-slate-200 p-3 transition-colors hover:border-[#0B4FC4]/30 hover:bg-blue-50/50"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="min-w-0 text-xs font-bold leading-snug text-slate-800">
+                              {duda.titulo}
+                            </p>
+                            <span
+                              className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${color.chip}`}
+                            >
+                              {duda.asignatura}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0B4FC4] text-[9px] font-black text-white">
+                              {inicialesDe(duda.autor.nombre)}
+                            </span>
+                            <span className="truncate font-semibold text-slate-500">
+                              {duda.autor.nombre}
+                            </span>
+                            <span className="shrink-0">
+                              · {tiempoRelativoForo(duda.creadoEn)}
+                            </span>
+                            <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-semibold text-slate-500">
+                              <IconoComentario className="h-3.5 w-3.5" />
+                              {duda.totalRespuestas}
+                            </span>
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setModalPregunta(true)}
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#0B4FC4]/30 bg-blue-50/60 px-3 py-2 text-[11px] font-bold text-[#0B4FC4] transition-colors hover:bg-blue-50"
+              >
+                + Hacer una pregunta
+              </button>
             </section>
           </div>
         </div>
       </div>
+
+      <ModalPregunta
+        abierto={modalPregunta}
+        token={token}
+        onCerrar={() => setModalPregunta(false)}
+        onCreada={handlePreguntaCreada}
+      />
     </AppShell>
   );
 }

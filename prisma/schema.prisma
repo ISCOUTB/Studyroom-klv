@@ -59,6 +59,8 @@ enum TipoNotificacionEnum {
   MONITOR_APROBADO
   MONITOR_RECHAZADO
   SOLICITUD_MONITOR
+  FORO_RESPUESTA
+  FORO_ACEPTADA
 }
 
 model Usuario {
@@ -91,6 +93,8 @@ model Usuario {
   tutoriasSolicitadas Tutoria[]    @relation("SolicitanteTutorias")
   notificaciones    Notificacion[]
   trazosPizarra     TrazoPizarra[]
+  preguntasForo     Pregunta[]      @relation("PreguntasForo")
+  respuestasForo    Respuesta[]     @relation("RespuestasForo")
 
   @@map("usuarios")
 }
@@ -264,4 +268,36 @@ model Notificacion {
 
   @@index([usuarioId, leida, creadaEn])
   @@map("notificaciones")
+}
+
+model Pregunta {
+  id          String    @id @default(uuid())
+  autorId     String    @map("autor_id")
+  autor       Usuario   @relation("PreguntasForo", fields: [autorId], references: [id], onDelete: Cascade)
+  titulo      String    @db.VarChar(150)
+  descripcion String    @db.VarChar(1000)
+  asignatura  String
+  tema        String?   @db.VarChar(80)
+  resuelta    Boolean   @default(false)
+  creadoEn    DateTime  @default(now()) @map("creado_en")
+
+  respuestas  Respuesta[]
+
+  @@index([asignatura, resuelta, creadoEn])
+  @@index([creadoEn])
+  @@map("preguntas_foro")
+}
+
+model Respuesta {
+  id         String   @id @default(uuid())
+  preguntaId String   @map("pregunta_id")
+  pregunta   Pregunta @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
+  autorId    String   @map("autor_id")
+  autor      Usuario  @relation("RespuestasForo", fields: [autorId], references: [id], onDelete: Cascade)
+  contenido  String   @db.VarChar(1000)
+  aceptada   Boolean  @default(false)
+  creadoEn   DateTime @default(now()) @map("creado_en")
+
+  @@index([preguntaId, creadoEn])
+  @@map("respuestas_foro")
 }

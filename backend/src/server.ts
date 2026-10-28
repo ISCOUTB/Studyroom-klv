@@ -8,6 +8,7 @@ import salasRoutes from './modules/salas/salas.routes';
 import tutoriasRoutes from './modules/tutorias/tutorias.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import notificacionesRoutes from './modules/notificaciones/notificaciones.routes';
+import foroRoutes from './modules/foro/foro.routes';
 import { registrarChat } from './modules/salas/chat.socket';
 import { iniciarSchedulerTutorias } from './modules/tutorias/tutorias.scheduler';
 import { getCurrentUser } from './modules/auth/auth.controller';
@@ -92,6 +93,11 @@ app.use('/api/tutorias', tutoriasRoutes);
 app.use('/api/notificaciones', notificacionesRoutes);
 
 // ---------------------------------------------------------
+// Foro de dudas
+// ---------------------------------------------------------
+app.use('/api/foro', foroRoutes);
+
+// ---------------------------------------------------------
 // Administración (solo ADMINISTRADOR)
 // ---------------------------------------------------------
 app.use('/api/admin', adminRoutes);
@@ -155,6 +161,13 @@ httpServer.listen(PORT, () => {
   console.log('   GET    /api/notificaciones          (requiere JWT)');
   console.log('   PATCH  /api/notificaciones/leer-todas');
   console.log('   PATCH  /api/notificaciones/:id/leer');
+  console.log('   GET    /api/foro                    (requiere JWT)');
+  console.log('   POST   /api/foro                    (requiere JWT)');
+  console.log('   GET    /api/foro/:id                (requiere JWT)');
+  console.log('   POST   /api/foro/:id/respuestas     (requiere JWT)');
+  console.log('   PATCH  /api/foro/:id/respuestas/:respuestaId/aceptar');
+  console.log('   DELETE /api/foro/:id                (autor o ADMINISTRADOR)');
+  console.log('   DELETE /api/foro/:id/respuestas/:respuestaId');
   console.log('   GET    /api/admin/monitores         (solo ADMINISTRADOR)');
   console.log('   WS     /socket.io                   (mensajería y avisos con JWT)');
   console.log('   GET    /api/me                      (requiere JWT)');
