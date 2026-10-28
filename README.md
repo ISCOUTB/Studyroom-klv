@@ -320,15 +320,23 @@ Rutas para usuarios autenticados:
 
 ## Tutorías Académicas
 
-Los estudiantes pueden agendar acompañamiento con monitores de semestres avanzados, de forma virtual o presencial en el campus.
+Los estudiantes pueden agendar acompañamiento con monitores de semestres avanzados, de forma virtual o presencial en el campus. El catálogo de monitores se puede filtrar por modalidad y asignatura, buscar por nombre, carrera o tema, y ordenar por mejor calificados, más horarios o más reseñas.
 
 ### Flujo de una tutoría
 
-1. Un estudiante envía su **solicitud de monitor** con carrera, semestre, asignaturas, biografía y modalidad.
+1. Un estudiante envía su **solicitud de monitor** con carrera, semestre, asignaturas, biografía, experiencia y modalidad.
 2. Un **administrador** revisa la solicitud y la aprueba o la rechaza en `/admin?tab=monitores`.
 3. Al aprobarse, el usuario pasa a tener rol `TUTOR` y puede publicar **bloques de disponibilidad** (fecha, hora de inicio y hora de fin), además de editar su perfil público.
-4. Un estudiante elige un monitor y un bloque libre, indica modalidad (Virtual / Presencial), ubicación y notas.
+4. Un estudiante elige un monitor y un bloque libre desde el modal **Agendar tutoría**. La modalidad se hereda del monitor y las notas son opcionales.
 5. El monitor tiene **24 horas** (o hasta el inicio del bloque, si ocurre antes) para aceptar o rechazar. Si acepta, la tutoría queda `AGENDADA` y las demás solicitudes de ese bloque se rechazan automáticamente. Si no responde, la solicitud pasa a `EXPIRADA`.
+6. Cuando la tutoría está `FINALIZADA`, el estudiante que la solicitó puede calificarla una única vez con 1 a 5 estrellas y un comentario opcional.
+
+### Calificaciones
+
+- Solo el **solicitante** puede calificar, solo si la tutoría está `FINALIZADA` y solo una vez (`409` si ya existe).
+- Cada calificación se guarda en `CalificacionTutoria` y actualiza `Tutoria.calificacion`, que alimenta el promedio del panel administrativo.
+- `GET /api/tutorias/monitores` devuelve `promedio` (un decimal) y `totalResenas` por monitor; las tarjetas muestran estrellas, promedio y número de reseñas.
+- En **Mis tutorías**, las sesiones finalizadas sin calificar muestran el botón **Calificar**.
 
 ### Estados de una tutoría
 
@@ -353,16 +361,17 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | `GET` | `/api/tutorias/contexto` | Indica si el usuario es monitor aprobado y el estado de su solicitud. |
 | `POST` | `/api/tutorias/solicitud-monitor` | Envía o actualiza una solicitud para ser monitor. |
 | `GET` | `/api/tutorias/perfil-monitor` | Devuelve el perfil público del monitor y sus bloques. |
-| `PUT` | `/api/tutorias/perfil-monitor` | Actualiza carrera, semestre, asignaturas, biografía y modalidad. |
+| `PUT` | `/api/tutorias/perfil-monitor` | Actualiza carrera, semestre, asignaturas, biografía, experiencia y modalidad. |
 | `GET` | `/api/tutorias/disponibilidad` | Lista los bloques futuros del monitor autenticado. |
 | `POST` | `/api/tutorias/disponibilidad` | Publica un bloque (`fecha`, `horaIni`, `horaFin`). |
 | `DELETE` | `/api/tutorias/disponibilidad/:id` | Elimina un bloque propio. |
-| `GET` | `/api/tutorias/monitores` | Catálogo de monitores aprobados con sus bloques libres. |
-| `GET` | `/api/tutorias` | Tutorías del usuario (solicitante o monitor; el administrador ve todas). |
+| `GET` | `/api/tutorias/monitores?orden=mejor-calificados\|mas-horarios\|mas-resenas` | Catálogo de monitores aprobados con sus bloques libres, `promedio`, `totalResenas` y `experiencia`. |
+| `GET` | `/api/tutorias` | Tutorías del usuario (solicitante o monitor; el administrador ve todas) con `calificacion` y `puedeCalificar`. |
 | `POST` | `/api/tutorias` | Solicita una tutoría (`monitorId`, `disponibilidadId`, `modalidad`, `ubicacion`, `notas`). |
 | `PATCH` | `/api/tutorias/:id/responder` | El monitor acepta o rechaza (`{ "aceptar": true }`). |
 | `PATCH` | `/api/tutorias/:id/cancelar` | Cancela una tutoría activa. |
 | `PATCH` | `/api/tutorias/:id/finalizar` | Marca como finalizada una tutoría agendada que ya comenzó. |
+| `PATCH` | `/api/tutorias/:id/calificar` | Califica una tutoría finalizada (`puntaje` 1–5, `comentario` opcional). |
 | `GET` | `/api/admin/monitores` | Lista solicitudes pendientes y monitores aprobados (solo administrador). |
 | `PATCH` | `/api/admin/monitores/:id` | Aprueba o rechaza una solicitud (`{ "aprobado": true }`). |
 
@@ -370,9 +379,15 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 
 | Ruta | Descripción |
 | --- | --- |
-| `/tutorias` | Catálogo de monitores, filtros, agendamiento y seguimiento de tutorías activas e historial. |
-| `/perfil/monitor` | Solicitud para ser monitor, edición del perfil público y gestión de bloques de disponibilidad. |
+| `/tutorias` | Pestañas **Buscar monitor** (filtros, orden, tarjetas con promedio, experiencia y próximos horarios) y **Mis tutorías** (activas, historial y calificación). |
+| `/perfil/monitor` | **Conviértete en monitor** (pasos, formulario con experiencia y modalidad) o **Mi perfil de monitor** con gestión de bloques de disponibilidad. |
 | `/admin?tab=monitores` | Revisión, aprobación y rechazo de solicitudes de monitor. |
+
+### Persistencia
+
+- **`Tutor`** → tabla `tutores`: incluye `experiencia` (`VARCHAR(500)`) además de carrera, semestre, biografía, modalidad, ubicación, asignaturas y estado de aprobación.
+- **`CalificacionTutoria`** → tabla `calificaciones_tutoria`: `id`, `tutoria_id` único, `monitor_id`, `estudiante_id`, `puntaje` (1–5), `comentario` (300) opcional y `creado_en`; con borrado en cascada desde la tutoría, el monitor y el estudiante.
+- La migración `prisma/migrations/20261028070000_tutorias_calificaciones` agrega `experiencia` a `tutores` y crea `calificaciones_tutoria` con sus índices y llaves foráneas.
 
 Los enlaces a **Tutorías** están disponibles en la barra lateral de todas las pantallas autenticadas. Los monitores ven el acceso a su perfil desde la barra lateral/buscador y los administradores al panel de aprobación.
 

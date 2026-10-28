@@ -16,9 +16,12 @@ export interface Monitor {
   semestre: number;
   fotoUrl: string | null;
   biografia: string | null;
+  experiencia: string | null;
   modalidad: 'Virtual' | 'Presencial';
   ubicacion: string | null;
   asignaturas: string[];
+  promedio: number;
+  totalResenas: number;
   disponibilidad: DisponibilidadMonitor[];
   aprobado?: boolean;
   solicitudEn?: string;
@@ -62,6 +65,8 @@ export interface Tutoria {
   } | null;
   soyMonitor: boolean;
   soySolicitante: boolean;
+  calificacion: { puntaje: number; comentario: string | null } | null;
+  puedeCalificar: boolean;
 }
 
 export interface SolicitudMonitor {
@@ -69,6 +74,7 @@ export interface SolicitudMonitor {
   carrera: string;
   semestre: number;
   biografia: string | null;
+  experiencia: string | null;
   modalidad: 'Virtual' | 'Presencial';
   ubicacion: string | null;
   asignaturas: string[];
@@ -131,6 +137,23 @@ export function formatearHora(hora: string): string {
   }).format(fecha);
 }
 
+/** "14:00", "15:00" -> "2:00–3:00 p. m." (omite el sufijo repetido) */
+export function formatearRango(horaIni: string, horaFin: string): string {
+  const inicio = formatearHora(horaIni);
+  const fin = formatearHora(horaFin);
+  const sufijo = (valor: string) =>
+    valor.match(/([ap])\.\s?m\.$/i)?.[1].toLowerCase() ?? null;
+
+  const sufijoInicio = sufijo(inicio);
+  const sufijoFin = sufijo(fin);
+
+  if (sufijoInicio && sufijoInicio === sufijoFin) {
+    return `${inicio.replace(/\s?[ap]\.\s?m\.$/i, '')}–${fin}`;
+  }
+
+  return `${inicio}–${fin}`;
+}
+
 export function formatearFechaHora(iso: string | null): string {
   if (!iso) return 'Por definir';
   return FORMATO_FECHA_HORA.format(new Date(iso)).replace('.', '');
@@ -141,6 +164,74 @@ export function fechaLocalISO(fecha: Date): string {
   const mes = String(fecha.getMonth() + 1).padStart(2, '0');
   const dia = String(fecha.getDate()).padStart(2, '0');
   return `${anio}-${mes}-${dia}`;
+}
+
+/** "2026-10-27" -> Date local a medianoche. */
+export function parseFechaLocal(fecha: string): Date | null {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  if (!anio || !mes || !dia) return null;
+  const date = new Date(anio, mes - 1, dia);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** "2026-10-27", "14:00" -> "Mar 27 oct · 2:00 p. m." */
+export function formatearChipHorario(fecha: string, hora: string): string {
+  const date = parseFechaLocal(fecha);
+  if (!date) return `${fecha} · ${formatearHora(hora)}`;
+
+  const partes = new Intl.DateTimeFormat('es-CO', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).formatToParts(date);
+
+  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((parte) => parte.type === tipo)?.value ?? '';
+
+  const diaSemana = valor('weekday').replace('.', '');
+  const diaSemanaCapitalizado =
+    diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
+
+  return `${diaSemanaCapitalizado} ${valor('day')} ${valor('month').replace(
+    '.',
+    ''
+  )} · ${formatearHora(hora)}`;
+}
+
+/** "2026-10-27" -> "MARTES, 27 DE OCTUBRE" */
+export function formatearDiaLargo(fecha: string): string {
+  const date = parseFechaLocal(fecha);
+  if (!date) return fecha;
+
+  return new Intl.DateTimeFormat('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+    .format(date)
+    .toUpperCase();
+}
+
+/** Agrupa bloques por fecha conservando el orden de llegada. */
+export function agruparPorDia<T extends { fecha: string }>(
+  bloques: T[]
+): Array<{ fecha: string; etiqueta: string; bloques: T[] }> {
+  const grupos = new Map<string, T[]>();
+
+  for (const bloque of bloques) {
+    const lista = grupos.get(bloque.fecha);
+    if (lista) {
+      lista.push(bloque);
+    } else {
+      grupos.set(bloque.fecha, [bloque]);
+    }
+  }
+
+  return Array.from(grupos.entries()).map(([fecha, items]) => ({
+    fecha,
+    etiqueta: formatearDiaLargo(fecha),
+    bloques: items,
+  }));
 }
 
 export function estadoTutoriaClase(estado: string): string {

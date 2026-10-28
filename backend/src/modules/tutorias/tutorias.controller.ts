@@ -46,6 +46,7 @@ type TutorConUsuario = {
   semestre: number;
   fotoUrl: string | null;
   biografia: string | null;
+  experiencia: string | null;
   modalidad: string;
   ubicacion: string | null;
   asignaturas: string[];
@@ -79,6 +80,7 @@ type TutoriaConRelaciones = {
   monitor: TutorConUsuario;
   solicitante: UsuarioResumen;
   disponibilidad: { id: string; fecha: Date; horaIni: string; horaFin: string; diaSemana: string } | null;
+  calificacionTutoria?: { puntaje: number; comentario: string | null } | null;
 };
 
 function text(value: unknown): string {
@@ -187,7 +189,17 @@ function serializarDisponibilidad(bloque: DisponibilidadConTutorias) {
   };
 }
 
-function serializarMonitor(tutor: TutorConUsuario, disponibilidad: DisponibilidadConTutorias[]) {
+function serializarMonitor(
+  tutor: TutorConUsuario,
+  disponibilidad: DisponibilidadConTutorias[],
+  puntajes: number[] = []
+) {
+  const totalResenas = puntajes.length;
+  const promedio =
+    totalResenas === 0
+      ? 0
+      : Math.round((puntajes.reduce((suma, puntaje) => suma + puntaje, 0) / totalResenas) * 10) / 10;
+
   return {
     id: tutor.id,
     nombre: tutor.usuario.nombre,
@@ -196,9 +208,12 @@ function serializarMonitor(tutor: TutorConUsuario, disponibilidad: Disponibilida
     semestre: tutor.semestre,
     fotoUrl: tutor.fotoUrl,
     biografia: tutor.biografia,
+    experiencia: tutor.experiencia,
     modalidad: ETIQUETA_MODALIDAD[tutor.modalidad] ?? 'Virtual',
     ubicacion: tutor.ubicacion,
     asignaturas: tutor.asignaturas,
+    promedio,
+    totalResenas,
     disponibilidad: disponibilidad.map(serializarDisponibilidad),
   };
 }
@@ -238,6 +253,16 @@ function serializarTutoria(tutoria: TutoriaConRelaciones, usuarioId: string) {
       : null,
     soyMonitor: tutoria.monitorId === usuarioId,
     soySolicitante: tutoria.solicitanteId === usuarioId,
+    calificacion: tutoria.calificacionTutoria
+      ? {
+          puntaje: tutoria.calificacionTutoria.puntaje,
+          comentario: tutoria.calificacionTutoria.comentario,
+        }
+      : null,
+    puedeCalificar:
+      tutoria.solicitanteId === usuarioId &&
+      tutoria.estado === 'FINALIZADA' &&
+      !tutoria.calificacionTutoria,
   };
 }
 
@@ -257,6 +282,7 @@ export const obtenerContexto = async (req: AuthRequest, res: Response) => {
         carrera: true,
         semestre: true,
         biografia: true,
+        experiencia: true,
         modalidad: true,
         ubicacion: true,
         asignaturas: true,
@@ -273,6 +299,7 @@ export const obtenerContexto = async (req: AuthRequest, res: Response) => {
             carrera: tutor.carrera,
             semestre: tutor.semestre,
             biografia: tutor.biografia,
+            experiencia: tutor.experiencia,
             modalidad: ETIQUETA_MODALIDAD[tutor.modalidad] ?? 'Virtual',
             ubicacion: tutor.ubicacion,
             asignaturas: tutor.asignaturas,
@@ -297,6 +324,7 @@ export const solicitarMonitor = async (req: AuthRequest, res: Response) => {
   const carrera = text(req.body?.carrera);
   const semestre = Number(req.body?.semestre);
   const biografia = text(req.body?.biografia);
+  const experiencia = text(req.body?.experiencia);
   const modalidad = modalidadDe(req.body?.modalidad ?? 'Virtual');
   const ubicacion = text(req.body?.ubicacion);
   const asignaturas = listaAsignaturas(req.body?.asignaturas);
@@ -309,6 +337,9 @@ export const solicitarMonitor = async (req: AuthRequest, res: Response) => {
   }
   if (biografia.length > 300) {
     return res.status(400).json({ error: 'La biografía no puede superar los 300 caracteres.' });
+  }
+  if (experiencia.length > 500) {
+    return res.status(400).json({ error: 'La experiencia no puede superar los 500 caracteres.' });
   }
   if (!modalidad) {
     return res.status(400).json({ error: 'Selecciona una modalidad válida.' });
@@ -336,6 +367,7 @@ export const solicitarMonitor = async (req: AuthRequest, res: Response) => {
       carrera,
       semestre,
       biografia: biografia || null,
+      experiencia: experiencia || null,
       modalidad,
       ubicacion: modalidad === 'PRESENCIAL' ? ubicacion : null,
       asignaturas,
@@ -446,6 +478,7 @@ export const actualizarPerfilMonitor = async (req: AuthRequest, res: Response) =
   const carrera = text(req.body?.carrera);
   const semestre = Number(req.body?.semestre);
   const biografia = text(req.body?.biografia);
+  const experiencia = text(req.body?.experiencia);
   const modalidad = modalidadDe(req.body?.modalidad ?? 'Virtual');
   const ubicacion = text(req.body?.ubicacion);
   const asignaturas = listaAsignaturas(req.body?.asignaturas);
@@ -458,6 +491,9 @@ export const actualizarPerfilMonitor = async (req: AuthRequest, res: Response) =
   }
   if (biografia.length > 300) {
     return res.status(400).json({ error: 'La biografía no puede superar los 300 caracteres.' });
+  }
+  if (experiencia.length > 500) {
+    return res.status(400).json({ error: 'La experiencia no puede superar los 500 caracteres.' });
   }
   if (!modalidad) {
     return res.status(400).json({ error: 'Selecciona una modalidad válida.' });
@@ -483,6 +519,7 @@ export const actualizarPerfilMonitor = async (req: AuthRequest, res: Response) =
         carrera,
         semestre,
         biografia: biografia || null,
+        experiencia: experiencia || null,
         modalidad,
         ubicacion: modalidad === 'PRESENCIAL' ? ubicacion : null,
         asignaturas,
@@ -687,12 +724,15 @@ export const listarMonitores = async (req: AuthRequest, res: Response) => {
     return res.status(401).json({ error: 'No autenticado.' });
   }
 
+  const orden = text(req.query?.orden).toLowerCase();
+
   try {
     const tutores = await prisma.tutor.findMany({
       where: { aprobado: true },
       orderBy: { solicitudEn: 'asc' },
       include: {
         usuario: { select: { id: true, nombre: true, correoUnico: true } },
+        calificacionesRecibidas: { select: { puntaje: true } },
         disponibilidades: {
           where: { fecha: { gte: hoyUTC() } },
           orderBy: [{ fecha: 'asc' }, { horaIni: 'asc' }],
@@ -713,8 +753,26 @@ export const listarMonitores = async (req: AuthRequest, res: Response) => {
         return Boolean(inicio && inicio.getTime() > ahora);
       });
 
-      return serializarMonitor(tutor, disponibles);
+      return serializarMonitor(
+        tutor,
+        disponibles,
+        tutor.calificacionesRecibidas.map((calificacion) => calificacion.puntaje)
+      );
     });
+
+    const ordenar = {
+      'mas-horarios': (a: typeof monitores[number], b: typeof monitores[number]) =>
+        b.disponibilidad.length - a.disponibilidad.length,
+      'mas-resenas': (a: typeof monitores[number], b: typeof monitores[number]) =>
+        b.totalResenas - a.totalResenas,
+      'mejor-calificados': (a: typeof monitores[number], b: typeof monitores[number]) =>
+        b.promedio - a.promedio || b.totalResenas - a.totalResenas,
+    } as const;
+
+    const comparador =
+      ordenar[orden as keyof typeof ordenar] ?? ordenar['mejor-calificados'];
+
+    monitores.sort(comparador);
 
     return res.json({ monitores });
   } catch (error) {
@@ -760,6 +818,7 @@ export const listarTutorias = async (req: AuthRequest, res: Response) => {
         disponibilidad: {
           select: { id: true, fecha: true, horaIni: true, horaFin: true, diaSemana: true },
         },
+        calificacionTutoria: { select: { puntaje: true, comentario: true } },
       },
     });
 
@@ -1179,5 +1238,75 @@ export const finalizarTutoria = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[tutorias:finalizar]', error);
     return res.status(500).json({ error: 'No se pudo finalizar la tutoría.' });
+  }
+};
+
+// ---------------------------------------------------------
+// PATCH /api/tutorias/:id/calificar
+// ---------------------------------------------------------
+export const calificarTutoria = async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'No autenticado.' });
+  }
+
+  const id = text(req.params.id);
+  const puntaje = Number(req.body?.puntaje);
+  const comentario = text(req.body?.comentario);
+
+  if (!Number.isInteger(puntaje) || puntaje < 1 || puntaje > 5) {
+    return res.status(400).json({ error: 'La calificación debe estar entre 1 y 5 estrellas.' });
+  }
+  if (comentario.length > 300) {
+    return res.status(400).json({ error: 'El comentario no puede superar los 300 caracteres.' });
+  }
+
+  try {
+    const tutoria = await prisma.tutoria.findUnique({
+      where: { id },
+      include: { calificacionTutoria: { select: { id: true } } },
+    });
+
+    if (!tutoria) {
+      return res.status(404).json({ error: 'La tutoría no existe.' });
+    }
+    if (tutoria.solicitanteId !== req.user.id) {
+      return res.status(403).json({ error: 'Solo el estudiante que solicitó la tutoría puede calificarla.' });
+    }
+    if (tutoria.estado !== 'FINALIZADA') {
+      return res.status(400).json({ error: 'Solo puedes calificar tutorías finalizadas.' });
+    }
+    if (tutoria.calificacionTutoria) {
+      return res.status(409).json({ error: 'Ya calificaste esta tutoría.' });
+    }
+
+    const [calificacion] = await prisma.$transaction([
+      prisma.calificacionTutoria.create({
+        data: {
+          tutoriaId: tutoria.id,
+          monitorId: tutoria.monitorId,
+          estudianteId: req.user.id,
+          puntaje,
+          comentario: comentario || null,
+        },
+      }),
+      prisma.tutoria.update({
+        where: { id: tutoria.id },
+        data: { calificacion: puntaje },
+      }),
+    ]);
+
+    return res.status(201).json({
+      message: 'Gracias por calificar la tutoría.',
+      calificacion: {
+        puntaje: calificacion.puntaje,
+        comentario: calificacion.comentario,
+      },
+    });
+  } catch (error) {
+    if ((error as { code?: string })?.code === 'P2002') {
+      return res.status(409).json({ error: 'Ya calificaste esta tutoría.' });
+    }
+    console.error('[tutorias:calificar]', error);
+    return res.status(500).json({ error: 'No se pudo guardar la calificación.' });
   }
 };

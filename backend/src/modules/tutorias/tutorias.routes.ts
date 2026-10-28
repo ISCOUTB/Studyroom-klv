@@ -13,6 +13,7 @@ import {
   responderTutoria,
   cancelarTutoria,
   finalizarTutoria,
+  calificarTutoria,
 } from './tutorias.controller';
 import { authMiddleware } from '../../shared/middleware/auth.middleware';
 
@@ -35,5 +36,6 @@ router.post('/', solicitarTutoria);
 router.patch('/:id/responder', responderTutoria);
 router.patch('/:id/cancelar', cancelarTutoria);
 router.patch('/:id/finalizar', finalizarTutoria);
+router.patch('/:id/calificar', calificarTutoria);
 
 export default router;

@@ -110,6 +110,7 @@ model Usuario {
   reportesCreados   Reporte[]       @relation("ReportesCreados")
   reportesResueltos Reporte[]       @relation("ReportesResueltos")
   auditoria         RegistroAuditoria[] @relation("AuditoriaAdmin")
+  calificacionesHechas CalificacionTutoria[] @relation("CalificacionesEstudiante")
 
   @@map("usuarios")
 }
@@ -131,6 +132,7 @@ model Tutor {
   semestre      Int
   fotoUrl       String?      @map("foto_url")
   biografia     String?      @db.VarChar(300)
+  experiencia   String?      @db.VarChar(500)
   modalidad     ModalidadEnum @default(VIRTUAL)
   ubicacion     String?      // ej: "Bloque C · Salón 204"
   asignaturas   String[]     // ["Cálculo I", "Física I", etc.]
@@ -139,6 +141,7 @@ model Tutor {
 
   disponibilidades DisponibilidadMonitor[]
   tutoriasAsignadas Tutoria[]              @relation("MonitorTutorias")
+  calificacionesRecibidas CalificacionTutoria[]
 
   @@map("tutores")
 }
@@ -204,6 +207,8 @@ model Tutoria {
   ubicacion       String?
   notas           String?
   calificacion    Int?
+
+  calificacionTutoria CalificacionTutoria?
 
   @@index([monitorId, programadaEn])
   @@index([solicitanteId, estado])
@@ -366,4 +371,23 @@ model RegistroAuditoria {
 
   @@index([creadoEn])
   @@map("registro_auditoria")
+}
+
+// ------------------------------------------------------------
+// Calificaciones de tutorías finalizadas
+// ------------------------------------------------------------
+model CalificacionTutoria {
+  id           String   @id @default(uuid())
+  tutoriaId    String   @unique @map("tutoria_id")
+  tutoria      Tutoria  @relation(fields: [tutoriaId], references: [id], onDelete: Cascade)
+  monitorId    String   @map("monitor_id")
+  monitor      Tutor    @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  estudianteId String   @map("estudiante_id")
+  estudiante   Usuario  @relation("CalificacionesEstudiante", fields: [estudianteId], references: [id], onDelete: Cascade)
+  puntaje      Int
+  comentario   String?  @db.VarChar(300)
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  @@index([monitorId, creadoEn])
+  @@map("calificaciones_tutoria")
 }
