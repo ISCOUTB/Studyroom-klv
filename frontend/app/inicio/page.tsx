@@ -7,11 +7,8 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ModalPregunta } from '@/components/foro/ModalPregunta';
 import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/api';
-import {
-  type Sala,
-  colorDeMateria,
-  inicialesDe,
-} from '@/lib/salas';
+import { useCatalogo } from '@/lib/catalogo';
+import { type Sala, inicialesDe } from '@/lib/salas';
 import {
   type Tutoria,
   formatearFechaHora,
@@ -71,6 +68,7 @@ function IconoComentario({ className = 'h-4 w-4' }: { className?: string }) {
 export default function InicioPage() {
   const { user, token, isLoading } = useAuth();
   const router = useRouter();
+  const { colorDe } = useCatalogo();
 
   const [salas, setSalas] = useState<Sala[]>([]);
   const [tutorias, setTutorias] = useState<Tutoria[]>([]);
@@ -318,7 +316,7 @@ export default function InicioPage() {
             ) : (
               <div className="space-y-3">
                 {salasEnVivo.slice(0, 3).map((sala) => {
-                  const color = colorDeMateria(sala.asignatura);
+                  const color = colorDe(sala.asignatura);
                   const uniendo = uniendoId === sala.id;
                   const llena = sala.participantesActuales >= sala.cupoMaximo;
 
@@ -526,7 +524,7 @@ export default function InicioPage() {
               ) : (
                 <ul className="mt-4 space-y-2.5">
                   {dudas.slice(0, 3).map((duda) => {
-                    const color = colorDeMateria(duda.asignatura);
+                    const color = colorDe(duda.asignatura);
 
                     return (
                       <li key={duda.id}>

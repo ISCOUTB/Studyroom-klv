@@ -20,7 +20,7 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
 ## Estructura del Stack
 
 - **Frontend:** Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui (Estilo institucional UTB `#0B4FC4` / `#1473E6`).
-- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales`, las tutorías en `/api/tutorias`, el foro de dudas en `/api/foro`, las notificaciones en `/api/notificaciones` y la administración de monitores en `/api/admin/monitores`.
+- **Backend (API REST):** Node.js + Express + Prisma ORM. La autenticación está implementada en `/api/auth`, las salas de estudio en `/api/salas`, los materiales de cada sala en `/api/salas/:id/materiales`, las tutorías en `/api/tutorias`, el foro de dudas en `/api/foro`, las notificaciones en `/api/notificaciones`, el catálogo de asignaturas en `/api/asignaturas`, los reportes de contenido en `/api/reportes` y la administración en `/api/admin`.
 - **Base de Datos:** PostgreSQL (Supabase o local) + Prisma ORM.
 - **Autenticación:** JWT con expiración de 8 h + bcryptjs. Verificación de correo con enlace válido por 24 h y recuperación de contraseña con enlace válido por 1 h.
 - **Correo:** Nodemailer vía SMTP. Si no hay SMTP configurado, los enlaces se imprimen en la consola del servicio para desarrollo.
@@ -155,7 +155,7 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 
 ### Navegación autenticada (frontend)
 
-Todas las pantallas autenticadas comparten el componente `AppShell`: barra lateral con Inicio, Salas, Tutorías, Foro, Repositorio, Banco de ejercicios y Administración (solo para `ADMINISTRADOR`), además de la barra superior con buscador (`⌘K`/`Ctrl+K`), modo oscuro, notificaciones y acceso al perfil. La barra lateral se colapsa en móvil desde 360 px. La sala en vivo `/salas/[id]` mantiene su propio diseño sin `AppShell`.
+Todas las pantallas autenticadas comparten el componente `AppShell`: barra lateral con Inicio, Salas, Tutorías, Foro, Banco de ejercicios y Administración (solo para `ADMINISTRADOR`), además de la barra superior con buscador (`⌘K`/`Ctrl+K`), modo oscuro, notificaciones y acceso al perfil. La barra lateral se colapsa en móvil desde 360 px. La sala en vivo `/salas/[id]` mantiene su propio diseño sin `AppShell`.
 
 | Ruta | Descripción |
 | --- | --- |
@@ -164,8 +164,10 @@ Todas las pantallas autenticadas comparten el componente `AppShell`: barra later
 | `/salas/[id]` | Detalle real de la sala, anfitrión, participantes, cronómetro y acciones de unirse/abandonar. Incluye mensajería en tiempo real con historial y presencia, y la pestaña de materiales con carga, descarga y eliminación de archivos. |
 | `/foro` | Foro de dudas con buscador, filtro por tema, chips de asignatura, pestañas por estado, tarjetas clicables y modal de creación. |
 | `/foro/[id]` | Detalle de una pregunta con sus respuestas, aceptación de la respuesta correcta y acciones de eliminación según permisos. |
-| `/repositorio`, `/banco-ejercicios` | Páginas “Próximamente” dentro de `AppShell` para las funcionalidades en preparación. |
-| `/tutorias`, `/perfil`, `/perfil/editar`, `/perfil/monitor`, `/admin/monitores` | Conservan su contenido actual y ahora se muestran dentro de `AppShell`. |
+| `/banco-ejercicios` | Página “Próximamente” dentro de `AppShell` para la funcionalidad en preparación. |
+| `/tutorias`, `/perfil`, `/perfil/editar`, `/perfil/monitor` | Conservan su contenido actual y se muestran dentro de `AppShell`. |
+| `/admin` | Panel de administración con pestañas Resumen, Monitores, Asignaturas, Reportes y Auditoría. Solo para `ADMINISTRADOR`; los demás roles ven **Acceso denegado**. La pestaña activa se refleja en la URL (`/admin?tab=monitores`). |
+| `/admin/monitores` | Redirige a `/admin?tab=monitores` para conservar enlaces anteriores. |
 
 ---
 
@@ -241,7 +243,7 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 
 | Ruta | Descripción |
 | --- | --- |
-| `/foro` | Listado con buscador por palabra clave, filtro por tema, chips de asignatura (Todas + 5 materias), pestañas Todas/Sin resolver/Resueltas y tarjetas clicables con etiqueta de asignatura, tema, autor, tiempo relativo, contador de respuestas e insignia verde "Resuelta". Incluye el modal "Hacer una pregunta". |
+| `/foro` | Listado con buscador por palabra clave, filtro por tema, chips de asignatura (Todas + catálogo activo), pestañas Todas/Sin resolver/Resueltas y tarjetas clicables con etiqueta de asignatura, tema, autor, tiempo relativo, contador de respuestas e insignia verde "Resuelta". Incluye el modal "Hacer una pregunta". |
 | `/foro/[id]` | Pregunta completa, respuestas (la aceptada destacada en verde), caja para responder y botón "Marcar como respuesta" visible solo para el autor. Permite eliminar la pregunta o las respuestas según los permisos. |
 
 La sección **Dudas sin resolver** de `/inicio` consume `GET /api/foro?estado=sin-resolver`, muestra como máximo 3 preguntas y su botón "Hacer una pregunta" abre el mismo modal de creación.
@@ -256,6 +258,66 @@ La sección **Dudas sin resolver** de `/inicio` consume `GET /api/foro?estado=si
 
 ---
 
+## Administración, Catálogo y Moderación (RF-18)
+
+La pantalla `/admin` está disponible únicamente para el rol `ADMINISTRADOR`; cualquier otro rol autenticado ve **Acceso denegado**. El título es **Administración**, con el subtítulo “Métricas de la plataforma, monitores, catálogo y moderación.”, y cinco pestañas con icono cuya selección se refleja en la URL:
+
+| Pestaña | URL | Contenido |
+| --- | --- | --- |
+| Resumen | `/admin?tab=resumen` | Nueve tarjetas de métricas: usuarios registrados y nuevos en 7 días, activación de estudiantes, salas activas/total, tutorías finalizadas/solicitadas, calificación promedio con estrellas, preguntas del foro, ejercicios resueltos, materiales publicados y reportes pendientes. |
+| Monitores | `/admin?tab=monitores` | Solicitudes pendientes con aprobar/rechazar y listado de monitores activos. Reemplaza la antigua `/admin/monitores`, que ahora redirige aquí. |
+| Asignaturas | `/admin?tab=asignaturas` | CRUD del catálogo: crear, renombrar, elegir color y activar/desactivar. |
+| Reportes | `/admin?tab=reportes` | Reportes de material, pregunta, respuesta o mensaje con estado, motivo, reportante y fecha. Acciones **Retirar contenido** y **Descartar**. |
+| Auditoría | `/admin?tab=auditoria` | Tabla paginada y de solo lectura con fecha, responsable, acción y detalle. |
+
+### Catálogo de asignaturas
+
+- Las pantallas de **salas**, **tutorías**, **foro**, **inicio** y **perfil de monitor** leen el catálogo activo desde `GET /api/asignaturas` mediante el `CatalogoProvider` del layout raíz.
+- Si la API no está disponible o el catálogo está vacío, el frontend usa como respaldo la lista fija de `frontend/lib/salas.ts` (`Cálculo I`, `Física I`, `Álgebra Lineal`, `Estadística`, `Cálculo Integral`).
+- El backend valida la asignatura de salas y foro contra el catálogo activo y también aplica la lista fija como respaldo si la tabla está vacía.
+- Colores disponibles: `blue`, `emerald`, `amber`, `rose`, `violet`, `sky`, `indigo`, `teal`, `orange`, `slate`.
+- La migración siembra el catálogo inicial con identificadores fijos.
+
+### Reportes y moderación
+
+- Cualquier usuario autenticado puede reportar materiales de sala, preguntas y respuestas del foro desde el botón **Reportar**.
+- Un mismo usuario no puede tener dos reportes pendientes sobre el mismo contenido (`409`).
+- **Retirar contenido** elimina el material, la pregunta, la respuesta o el mensaje reportado. Si la respuesta era la aceptada, la pregunta vuelve a quedar sin resolver. Los demás reportes pendientes del mismo contenido se cierran automáticamente.
+- **Descartar** cierra el reporte sin borrar el contenido.
+- Cada decisión administrativa queda registrada en la auditoría.
+
+### API de administración
+
+Todas las rutas de `/api/admin` requieren `Authorization: Bearer <token>` y el rol `ADMINISTRADOR`.
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `GET` | `/api/admin/resumen` | Devuelve todas las métricas del panel en una sola respuesta. |
+| `GET` | `/api/admin/asignaturas` | Lista el catálogo completo con colores disponibles. |
+| `POST` | `/api/admin/asignaturas` | Crea una asignatura (`nombre`, `color`). |
+| `PATCH` | `/api/admin/asignaturas/:id` | Renombra, cambia el color o activa/desactiva (`activa`). |
+| `GET` | `/api/admin/reportes?estado=todos\|pendientes\|resueltos` | Lista los reportes y sus totales por estado. |
+| `PATCH` | `/api/admin/reportes/:id` | Resuelve un reporte con `{ "accion": "retirar" \| "descartar" }`. |
+| `GET` | `/api/admin/auditoria?page=1&limit=10` | Devuelve la auditoría paginada. |
+| `GET` | `/api/admin/monitores` | Lista solicitudes pendientes y monitores aprobados. |
+| `PATCH` | `/api/admin/monitores/:id` | Aprueba o rechaza una solicitud (`{ "aprobado": true }`). |
+
+Rutas para usuarios autenticados:
+
+| Método | Endpoint | Descripción |
+| --- | --- | --- |
+| `GET` | `/api/asignaturas` | Catálogo activo para filtros, formularios y etiquetas. |
+| `POST` | `/api/reportes` | Reporta contenido (`tipo`, `referenciaId`, `motivo`). |
+
+### Persistencia
+
+- **`Asignatura`** → tabla `asignaturas`: `id`, `nombre` único, `color`, `activa`, `creado_en`, `actualizado_en`.
+- **`Reporte`** → tabla `reportes`: `id`, `tipo` (`MATERIAL`, `PREGUNTA`, `RESPUESTA`, `MENSAJE`), `referencia_id`, `motivo` (500), `reportante_id`, `estado` (`PENDIENTE`, `RESUELTO`), `resuelto_por_id` opcional, `resuelto_en`, `creado_en`.
+- **`RegistroAuditoria`** → tabla `registro_auditoria`: `id`, `admin_id`, `accion` (120), `detalle` (500), `creado_en`.
+- La migración `prisma/migrations/20261028055454_admin_catalogo_moderacion` crea los enums `TipoReporteEnum` y `EstadoReporteEnum`, las tres tablas, sus índices y relaciones, agrega `calificacion` a `tutorias` y siembra el catálogo inicial.
+
+---
+
 ## Tutorías Académicas
 
 Los estudiantes pueden agendar acompañamiento con monitores de semestres avanzados, de forma virtual o presencial en el campus.
@@ -263,7 +325,7 @@ Los estudiantes pueden agendar acompañamiento con monitores de semestres avanza
 ### Flujo de una tutoría
 
 1. Un estudiante envía su **solicitud de monitor** con carrera, semestre, asignaturas, biografía y modalidad.
-2. Un **administrador** revisa la solicitud y la aprueba o la rechaza en `/admin/monitores`.
+2. Un **administrador** revisa la solicitud y la aprueba o la rechaza en `/admin?tab=monitores`.
 3. Al aprobarse, el usuario pasa a tener rol `TUTOR` y puede publicar **bloques de disponibilidad** (fecha, hora de inicio y hora de fin), además de editar su perfil público.
 4. Un estudiante elige un monitor y un bloque libre, indica modalidad (Virtual / Presencial), ubicación y notas.
 5. El monitor tiene **24 horas** (o hasta el inicio del bloque, si ocurre antes) para aceptar o rechazar. Si acepta, la tutoría queda `AGENDADA` y las demás solicitudes de ese bloque se rechazan automáticamente. Si no responde, la solicitud pasa a `EXPIRADA`.
@@ -310,7 +372,7 @@ Todas las rutas requieren `Authorization: Bearer <token>`.
 | --- | --- |
 | `/tutorias` | Catálogo de monitores, filtros, agendamiento y seguimiento de tutorías activas e historial. |
 | `/perfil/monitor` | Solicitud para ser monitor, edición del perfil público y gestión de bloques de disponibilidad. |
-| `/admin/monitores` | Revisión, aprobación y rechazo de solicitudes de monitor. |
+| `/admin?tab=monitores` | Revisión, aprobación y rechazo de solicitudes de monitor. |
 
 Los enlaces a **Tutorías** están disponibles en la barra lateral de todas las pantallas autenticadas. Los monitores ven el acceso a su perfil desde la barra lateral/buscador y los administradores al panel de aprobación.
 
@@ -326,7 +388,7 @@ Cada cambio relevante del ciclo de tutorías, de las postulaciones de monitor y 
 - **Panel desplegable** con las últimas 30 notificaciones, su tipo, mensaje, fecha relativa y estado de lectura.
 - **Aviso flotante (toast)** al recibir una notificación mientras la aplicación está abierta.
 - **Marcado individual o masivo** como leído, con actualización inmediata del contador.
-- **Enlaces de destino:** las tutorías abren `/tutorias#mis-tutorias`, las postulaciones abren `/admin/monitores` o `/perfil/monitor` y los avisos del foro abren la pregunta correspondiente en `/foro/[id]`.
+- **Enlaces de destino:** las tutorías abren `/tutorias#mis-tutorias`, las postulaciones abren `/admin?tab=monitores` o `/perfil/monitor` y los avisos del foro abren la pregunta correspondiente en `/foro/[id]`.
 - Las pantallas abiertas **se actualizan solas** al recibir un aviso (lista de tutorías, postulaciones o perfil del monitor).
 - La campanita usa variante clara en las pantallas blancas y variante oscura dentro de la sala en vivo. El panel y el toast se adaptan desde 360 px.
 

@@ -2,10 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '@/lib/api';
-import {
-  ASIGNATURAS_FORO,
-  type PreguntaForo,
-} from '@/lib/foro';
+import { useCatalogo } from '@/lib/catalogo';
+import { type PreguntaForo } from '@/lib/foro';
 
 interface ModalPreguntaProps {
   abierto: boolean;
@@ -26,6 +24,7 @@ export function ModalPregunta({
   const [descripcion, setDescripcion] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const { activas } = useCatalogo();
 
   // Formulario limpio cada vez que se abre.
   useEffect(() => {
@@ -188,9 +187,9 @@ export function ModalPregunta({
                   className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
                 >
                   <option value="">Elige una asignatura…</option>
-                  {ASIGNATURAS_FORO.map((materia) => (
-                    <option key={materia} value={materia}>
-                      {materia}
+                  {activas.map((materia) => (
+                    <option key={materia.id} value={materia.nombre}>
+                      {materia.nombre}
                     </option>
                   ))}
                 </select>

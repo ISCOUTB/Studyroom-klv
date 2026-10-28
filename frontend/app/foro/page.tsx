@@ -9,9 +9,8 @@ import { ModalPregunta } from '@/components/foro/ModalPregunta';
 import { Toast, useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/api';
-import { colorDeMateria } from '@/lib/salas';
+import { useCatalogo } from '@/lib/catalogo';
 import {
-  ASIGNATURAS_FORO,
   type EstadoForo,
   type PreguntaForo,
   tiempoRelativoForo,
@@ -72,6 +71,7 @@ export default function ForoPage() {
   const [modalAbierto, setModalAbierto] = useState(false);
 
   const { toast, mostrar, cerrar } = useToast();
+  const { activas, colorDe } = useCatalogo();
   const solicitudRef = useRef(0);
 
   useEffect(() => {
@@ -226,15 +226,15 @@ export default function ForoPage() {
             Todas
           </button>
 
-          {ASIGNATURAS_FORO.map((materia) => {
-            const color = colorDeMateria(materia);
-            const activo = asignatura === materia;
+          {activas.map((materia) => {
+            const color = colorDe(materia.nombre);
+            const activo = asignatura === materia.nombre;
 
             return (
               <button
-                key={materia}
+                key={materia.id}
                 type="button"
-                onClick={() => setAsignatura(materia)}
+                onClick={() => setAsignatura(materia.nombre)}
                 aria-pressed={activo}
                 className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                   activo
@@ -247,7 +247,7 @@ export default function ForoPage() {
                     activo ? 'bg-white' : color.punto
                   }`}
                 />
-                {materia}
+                {materia.nombre}
               </button>
             );
           })}
@@ -345,7 +345,7 @@ export default function ForoPage() {
           ) : (
             <ul className="space-y-3">
               {preguntas.map((pregunta) => {
-                const color = colorDeMateria(pregunta.asignatura);
+                const color = colorDe(pregunta.asignatura);
 
                 return (
                   <li key={pregunta.id}>

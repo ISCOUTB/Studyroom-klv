@@ -20,7 +20,9 @@ import { useParams, useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
 import { apiRequest, API_URL } from '@/lib/api';
 import { Toast, useToast } from '@/components/ui/Toast';
+import { ModalReporte } from '@/components/reportes/ModalReporte';
 import { useTheme } from '@/lib/theme-context';
+import { useCatalogo } from '@/lib/catalogo';
 import {
   type MaterialEstudio,
   type MensajeChat,
@@ -28,7 +30,6 @@ import {
   type SalaDetalle,
   EXTENSIONES_MATERIALES,
   MAX_MATERIAL_BYTES,
-  colorDeMateria,
   extensionDe,
   formatearTamano,
   inicialesDe,
@@ -324,6 +325,7 @@ function iconoDeMaterial(nombre: string): { emoji: string; clase: string } {
 
 export default function SalaEnVivoPage() {
   const { user, token, isLoading } = useAuth();
+  const { colorDe } = useCatalogo();
   const { temaOscuro, alternarTema } = useTheme();
   const { toast, mostrar: mostrarToast, cerrar: cerrarToast } = useToast();
   const router = useRouter();
@@ -383,6 +385,8 @@ export default function SalaEnVivoPage() {
   const [confirmarEliminarId, setConfirmarEliminarId] = useState<string | null>(
     null
   );
+  const [materialReportado, setMaterialReportado] =
+    useState<MaterialEstudio | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1125,7 +1129,7 @@ export default function SalaEnVivoPage() {
           }
         : { color: 'bg-amber-400', texto: 'Conectando a la sala…' };
 
-  const colorMateria = colorDeMateria(sala.asignatura);
+  const colorMateria = colorDe(sala.asignatura);
   const esPrivada = sala.privacidad === 'Privada';
   const enLineaTotal = sala.participando
     ? Math.max(usuariosEnLinea.length, 1)
@@ -2130,6 +2134,15 @@ export default function SalaEnVivoPage() {
                                 </div>
                               ) : (
                                 <div className="mt-2 flex items-center justify-end gap-1.5">
+                                  {material.usuario.id !== user.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setMaterialReportado(material)}
+                                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                                    >
+                                      Reportar
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -2370,6 +2383,14 @@ export default function SalaEnVivoPage() {
           </div>
         </div>
       )}
+      <ModalReporte
+        abierto={!!materialReportado}
+        token={token}
+        tipo="MATERIAL"
+        referenciaId={materialReportado?.id ?? null}
+        onCerrar={() => setMaterialReportado(null)}
+        onEnviado={(mensaje) => mostrarToast(mensaje)}
+      />
     </div>
   );
 }

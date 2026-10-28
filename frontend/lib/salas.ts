@@ -20,8 +20,8 @@ export interface ColorMateria {
   relleno: string;
 }
 
-export const COLORES_MATERIA: Record<string, ColorMateria> = {
-  'Cálculo I': {
+export const COLORES_POR_CLAVE: Record<string, ColorMateria> = {
+  blue: {
     punto: 'bg-blue-600',
     franja: 'bg-blue-600',
     chip: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -30,7 +30,7 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     borde: 'border-blue-200',
     relleno: 'border-blue-600 bg-blue-600 text-white shadow-sm',
   },
-  'Física I': {
+  emerald: {
     punto: 'bg-emerald-500',
     franja: 'bg-emerald-500',
     chip: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -39,7 +39,7 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     borde: 'border-emerald-200',
     relleno: 'border-emerald-600 bg-emerald-600 text-white shadow-sm',
   },
-  'Álgebra Lineal': {
+  amber: {
     punto: 'bg-amber-500',
     franja: 'bg-amber-500',
     chip: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -48,7 +48,7 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     borde: 'border-amber-200',
     relleno: 'border-amber-500 bg-amber-500 text-amber-950 shadow-sm',
   },
-  Estadística: {
+  rose: {
     punto: 'bg-rose-500',
     franja: 'bg-rose-500',
     chip: 'bg-rose-50 text-rose-700 border-rose-200',
@@ -57,7 +57,7 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     borde: 'border-rose-200',
     relleno: 'border-rose-600 bg-rose-600 text-white shadow-sm',
   },
-  'Cálculo Integral': {
+  violet: {
     punto: 'bg-violet-500',
     franja: 'bg-violet-500',
     chip: 'bg-violet-50 text-violet-700 border-violet-200',
@@ -66,6 +66,59 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     borde: 'border-violet-200',
     relleno: 'border-violet-600 bg-violet-600 text-white shadow-sm',
   },
+  sky: {
+    punto: 'bg-sky-500',
+    franja: 'bg-sky-500',
+    chip: 'bg-sky-50 text-sky-700 border-sky-200',
+    texto: 'text-sky-700',
+    suave: 'bg-sky-50',
+    borde: 'border-sky-200',
+    relleno: 'border-sky-600 bg-sky-600 text-white shadow-sm',
+  },
+  indigo: {
+    punto: 'bg-indigo-500',
+    franja: 'bg-indigo-500',
+    chip: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    texto: 'text-indigo-700',
+    suave: 'bg-indigo-50',
+    borde: 'border-indigo-200',
+    relleno: 'border-indigo-600 bg-indigo-600 text-white shadow-sm',
+  },
+  teal: {
+    punto: 'bg-teal-500',
+    franja: 'bg-teal-500',
+    chip: 'bg-teal-50 text-teal-700 border-teal-200',
+    texto: 'text-teal-700',
+    suave: 'bg-teal-50',
+    borde: 'border-teal-200',
+    relleno: 'border-teal-600 bg-teal-600 text-white shadow-sm',
+  },
+  orange: {
+    punto: 'bg-orange-500',
+    franja: 'bg-orange-500',
+    chip: 'bg-orange-50 text-orange-700 border-orange-200',
+    texto: 'text-orange-700',
+    suave: 'bg-orange-50',
+    borde: 'border-orange-200',
+    relleno: 'border-orange-600 bg-orange-600 text-white shadow-sm',
+  },
+  slate: {
+    punto: 'bg-slate-400',
+    franja: 'bg-slate-400',
+    chip: 'bg-slate-100 text-slate-600 border-slate-200',
+    texto: 'text-slate-600',
+    suave: 'bg-slate-50',
+    borde: 'border-slate-200',
+    relleno: 'border-slate-500 bg-slate-500 text-white shadow-sm',
+  },
+};
+
+export const COLORES_MATERIA: Record<string, ColorMateria> = {
+  'Cálculo I': COLORES_POR_CLAVE.blue,
+  'Física I': COLORES_POR_CLAVE.emerald,
+  'Álgebra Lineal': COLORES_POR_CLAVE.amber,
+  Estadística: COLORES_POR_CLAVE.rose,
+  'Cálculo Integral': COLORES_POR_CLAVE.violet,
 };
 
 const COLOR_POR_DEFECTO: ColorMateria = {
@@ -78,7 +131,8 @@ const COLOR_POR_DEFECTO: ColorMateria = {
   relleno: 'border-slate-500 bg-slate-500 text-white shadow-sm',
 };
 
-export function colorDeMateria(asignatura: string): ColorMateria {
+export function colorDeMateria(asignatura: string, clave?: string | null): ColorMateria {
+  if (clave && COLORES_POR_CLAVE[clave]) return COLORES_POR_CLAVE[clave];
   return COLORES_MATERIA[asignatura] ?? COLOR_POR_DEFECTO;
 }
 

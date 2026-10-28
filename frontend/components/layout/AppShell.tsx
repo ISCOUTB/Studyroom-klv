@@ -14,7 +14,6 @@ type IconoNombre =
   | 'salas'
   | 'tutorias'
   | 'foro'
-  | 'repositorio'
   | 'banco'
   | 'admin'
   | 'buscar'
@@ -74,14 +73,6 @@ function Icono({
         <svg {...comunes}>
           <path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5Z" />
           <path d="M8 10h8M8 14h5" />
-        </svg>
-      );
-    case 'repositorio':
-      return (
-        <svg {...comunes}>
-          <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5Z" />
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-          <path d="M8 6h8M8 10h6" />
         </svg>
       );
     case 'banco':
@@ -161,14 +152,13 @@ const ITEMS_NAV: ItemNav[] = [
   { href: '/salas', etiqueta: 'Salas', icono: 'salas', alias: 'estudiar grupo salas de estudio' },
   { href: '/tutorias', etiqueta: 'Tutorías', icono: 'tutorias', alias: 'monitores agendar' },
   { href: '/foro', etiqueta: 'Foro', icono: 'foro', alias: 'preguntas dudas' },
-  { href: '/repositorio', etiqueta: 'Repositorio', icono: 'repositorio', alias: 'materiales archivos' },
   { href: '/banco-ejercicios', etiqueta: 'Banco de ejercicios', icono: 'banco', alias: 'ejercicios practicar' },
   {
-    href: '/admin/monitores',
+    href: '/admin',
     etiqueta: 'Administración',
     icono: 'admin',
     soloAdmin: true,
-    alias: 'aprobar monitores panel admin',
+    alias: 'aprobar monitores catálogo reportes auditoría panel admin',
   },
 ];
 

@@ -6,9 +6,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { AvatarForo } from '@/components/foro/AvatarForo';
 import { Toast, useToast } from '@/components/ui/Toast';
+import { ModalReporte } from '@/components/reportes/ModalReporte';
 import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/api';
-import { colorDeMateria } from '@/lib/salas';
+import { useCatalogo } from '@/lib/catalogo';
+import { type TipoReporte } from '@/lib/admin';
 import {
   formatearFechaForo,
   tiempoRelativoForo,
@@ -45,8 +47,10 @@ export default function PreguntaForoPage() {
   const [enviando, setEnviando] = useState(false);
   const [aceptandoId, setAceptandoId] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState(false);
+  const [reporte, setReporte] = useState<{ tipo: TipoReporte; id: string } | null>(null);
 
   const { toast, mostrar, cerrar } = useToast();
+  const { colorDe } = useCatalogo();
 
   useEffect(() => {
     if (isLoading) return;
@@ -203,7 +207,7 @@ export default function PreguntaForoPage() {
   if (isLoading || !user) return null;
 
   const esAdmin = user.rol === 'ADMINISTRADOR';
-  const color = pregunta ? colorDeMateria(pregunta.asignatura) : null;
+  const color = pregunta ? colorDe(pregunta.asignatura) : null;
 
   return (
     <AppShell>
@@ -299,16 +303,29 @@ export default function PreguntaForoPage() {
                   </div>
                 </div>
 
-                {(pregunta.soyAutor || esAdmin) && (
-                  <button
-                    type="button"
-                    onClick={handleEliminarPregunta}
-                    disabled={eliminando}
-                    className="text-[11px] font-bold text-red-600 transition-colors hover:text-red-700 hover:underline disabled:opacity-60"
-                  >
-                    {eliminando ? 'Eliminando…' : 'Eliminar pregunta'}
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                  {!pregunta.soyAutor && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReporte({ tipo: 'PREGUNTA', id: pregunta.id })
+                      }
+                      className="text-[11px] font-bold text-slate-500 transition-colors hover:text-red-600 hover:underline"
+                    >
+                      Reportar
+                    </button>
+                  )}
+                  {(pregunta.soyAutor || esAdmin) && (
+                    <button
+                      type="button"
+                      onClick={handleEliminarPregunta}
+                      disabled={eliminando}
+                      className="text-[11px] font-bold text-red-600 transition-colors hover:text-red-700 hover:underline disabled:opacity-60"
+                    >
+                      {eliminando ? 'Eliminando…' : 'Eliminar pregunta'}
+                    </button>
+                  )}
+                </div>
               </div>
             </article>
 
@@ -381,6 +398,18 @@ export default function PreguntaForoPage() {
                       </p>
 
                       <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+                        {!respuesta.soyAutor && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReporte({ tipo: 'RESPUESTA', id: respuesta.id })
+                            }
+                            className="text-[11px] font-bold text-slate-500 transition-colors hover:text-red-600 hover:underline"
+                          >
+                            Reportar
+                          </button>
+                        )}
+
                         {pregunta.soyAutor && !respuesta.aceptada && (
                           <button
                             type="button"
@@ -448,6 +477,15 @@ export default function PreguntaForoPage() {
           </>
         )}
       </div>
+
+      <ModalReporte
+        abierto={!!reporte}
+        token={token}
+        tipo={reporte?.tipo ?? 'PREGUNTA'}
+        referenciaId={reporte?.id ?? null}
+        onCerrar={() => setReporte(null)}
+        onEnviado={(mensaje) => mostrar(mensaje)}
+      />
 
       <Toast
         abierto={!!toast}

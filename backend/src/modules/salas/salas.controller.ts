@@ -5,14 +5,7 @@ import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 import { esParticipanteActivo, listarMensajesSala } from './chat.service';
 import { expulsarUsuarioDeSala } from './chat.socket';
-
-const ASIGNATURAS = [
-  'Cálculo I',
-  'Física I',
-  'Álgebra Lineal',
-  'Estadística',
-  'Cálculo Integral',
-];
+import { esAsignaturaActiva } from '../admin/catalogo.service';
 
 const ESTADOS_CREACION: Record<string, 'ACTIVA' | 'PROGRAMADA'> = {
   activa: 'ACTIVA',
@@ -223,7 +216,7 @@ export const crearSala = async (req: AuthRequest, res: Response) => {
       error: 'El título debe tener entre 3 y 100 caracteres.',
     });
   }
-  if (!ASIGNATURAS.includes(asignatura)) {
+  if (!(await esAsignaturaActiva(asignatura))) {
     return res.status(400).json({
       error: 'Selecciona una asignatura válida.',
     });

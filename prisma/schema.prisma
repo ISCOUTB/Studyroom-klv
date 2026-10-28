@@ -63,6 +63,18 @@ enum TipoNotificacionEnum {
   FORO_ACEPTADA
 }
 
+enum TipoReporteEnum {
+  MATERIAL
+  PREGUNTA
+  RESPUESTA
+  MENSAJE
+}
+
+enum EstadoReporteEnum {
+  PENDIENTE
+  RESUELTO
+}
+
 model Usuario {
   id                String         @id @default(uuid())
   nombre            String
@@ -95,6 +107,9 @@ model Usuario {
   trazosPizarra     TrazoPizarra[]
   preguntasForo     Pregunta[]      @relation("PreguntasForo")
   respuestasForo    Respuesta[]     @relation("RespuestasForo")
+  reportesCreados   Reporte[]       @relation("ReportesCreados")
+  reportesResueltos Reporte[]       @relation("ReportesResueltos")
+  auditoria         RegistroAuditoria[] @relation("AuditoriaAdmin")
 
   @@map("usuarios")
 }
@@ -188,6 +203,7 @@ model Tutoria {
   modalidad       ModalidadEnum     @default(VIRTUAL)
   ubicacion       String?
   notas           String?
+  calificacion    Int?
 
   @@index([monitorId, programadaEn])
   @@index([solicitanteId, estado])
@@ -300,4 +316,54 @@ model Respuesta {
 
   @@index([preguntaId, creadoEn])
   @@map("respuestas_foro")
+}
+
+// ------------------------------------------------------------
+// Catálogo de asignaturas (RF-18)
+// ------------------------------------------------------------
+model Asignatura {
+  id           String   @id @default(uuid())
+  nombre       String   @unique
+  color        String   @default("blue")
+  activa       Boolean  @default(true)
+  creadoEn     DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  @@map("asignaturas")
+}
+
+// ------------------------------------------------------------
+// Moderación: reportes de contenido
+// ------------------------------------------------------------
+model Reporte {
+  id            String             @id @default(uuid())
+  tipo          TipoReporteEnum
+  referenciaId  String             @map("referencia_id")
+  motivo        String             @db.VarChar(500)
+  reportanteId  String             @map("reportante_id")
+  reportante    Usuario            @relation("ReportesCreados", fields: [reportanteId], references: [id], onDelete: Cascade)
+  estado        EstadoReporteEnum  @default(PENDIENTE)
+  resueltoPorId String?            @map("resuelto_por_id")
+  resueltoPor   Usuario?           @relation("ReportesResueltos", fields: [resueltoPorId], references: [id], onDelete: SetNull)
+  resueltoEn    DateTime?          @map("resuelto_en")
+  creadoEn      DateTime           @default(now()) @map("creado_en")
+
+  @@index([estado, creadoEn])
+  @@index([tipo, referenciaId])
+  @@map("reportes")
+}
+
+// ------------------------------------------------------------
+// Auditoría de acciones administrativas
+// ------------------------------------------------------------
+model RegistroAuditoria {
+  id        String   @id @default(uuid())
+  adminId   String   @map("admin_id")
+  admin     Usuario  @relation("AuditoriaAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  accion    String   @db.VarChar(120)
+  detalle   String   @db.VarChar(500)
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  @@index([creadoEn])
+  @@map("registro_auditoria")
 }

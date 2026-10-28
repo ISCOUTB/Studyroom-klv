@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 import { crearNotificacion } from '../notificaciones/notificaciones.service';
+import { esAsignaturaActiva } from '../admin/catalogo.service';
 
 const MAX_TITULO = 150;
 const MAX_DESCRIPCION = 1000;
@@ -188,6 +189,9 @@ export const crearPregunta = async (req: AuthRequest, res: Response) => {
   }
   if (asignatura.length > MAX_ASIGNATURA) {
     return res.status(400).json({ error: 'La asignatura no es válida.' });
+  }
+  if (!(await esAsignaturaActiva(asignatura))) {
+    return res.status(400).json({ error: 'Selecciona una asignatura del catálogo.' });
   }
   if (tema.length > MAX_TEMA) {
     return res

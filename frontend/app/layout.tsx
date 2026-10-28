@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/lib/auth-context';
+import { CatalogoProvider } from '@/lib/catalogo';
 import { NotificationsProvider } from '@/lib/notifications-context';
 import { NotificationToast } from '@/components/notifications/NotificationToast';
 import { ThemeProvider } from '@/lib/theme-context';
@@ -37,10 +38,12 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider>
           <AuthProvider>
-            <NotificationsProvider>
-              {children}
-              <NotificationToast />
-            </NotificationsProvider>
+            <CatalogoProvider>
+              <NotificationsProvider>
+                {children}
+                <NotificationToast />
+              </NotificationsProvider>
+            </CatalogoProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

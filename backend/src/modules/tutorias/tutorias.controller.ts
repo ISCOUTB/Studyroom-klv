@@ -374,7 +374,7 @@ export const solicitarMonitor = async (req: AuthRequest, res: Response) => {
           } solicitud para ser monitor de ${asignaturas.slice(0, 2).join(' y ')}${
             asignaturas.length > 2 ? '…' : '.'
           }`,
-          enlace: '/admin/monitores',
+          enlace: '/admin?tab=monitores',
         }))
       );
     } catch (error) {

@@ -7,6 +7,8 @@ import authRoutes from './modules/auth/auth.routes';
 import salasRoutes from './modules/salas/salas.routes';
 import tutoriasRoutes from './modules/tutorias/tutorias.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import catalogoRoutes from './modules/admin/catalogo.routes';
+import reportesRoutes from './modules/admin/reportes.routes';
 import notificacionesRoutes from './modules/notificaciones/notificaciones.routes';
 import foroRoutes from './modules/foro/foro.routes';
 import { registrarChat } from './modules/salas/chat.socket';
@@ -103,6 +105,12 @@ app.use('/api/foro', foroRoutes);
 app.use('/api/admin', adminRoutes);
 
 // ---------------------------------------------------------
+// Catálogo de asignaturas y reportes de contenido
+// ---------------------------------------------------------
+app.use('/api/asignaturas', catalogoRoutes);
+app.use('/api/reportes', reportesRoutes);
+
+// ---------------------------------------------------------
 // 404 y manejo global de errores
 // ---------------------------------------------------------
 app.use((_req, res) => {
@@ -168,7 +176,17 @@ httpServer.listen(PORT, () => {
   console.log('   PATCH  /api/foro/:id/respuestas/:respuestaId/aceptar');
   console.log('   DELETE /api/foro/:id                (autor o ADMINISTRADOR)');
   console.log('   DELETE /api/foro/:id/respuestas/:respuestaId');
+  console.log('   GET    /api/asignaturas             (requiere JWT)');
+  console.log('   POST   /api/reportes                (requiere JWT)');
+  console.log('   GET    /api/admin/resumen           (solo ADMINISTRADOR)');
   console.log('   GET    /api/admin/monitores         (solo ADMINISTRADOR)');
+  console.log('   PATCH  /api/admin/monitores/:id     (solo ADMINISTRADOR)');
+  console.log('   GET    /api/admin/asignaturas       (solo ADMINISTRADOR)');
+  console.log('   POST   /api/admin/asignaturas       (solo ADMINISTRADOR)');
+  console.log('   PATCH  /api/admin/asignaturas/:id   (solo ADMINISTRADOR)');
+  console.log('   GET    /api/admin/reportes          (solo ADMINISTRADOR)');
+  console.log('   PATCH  /api/admin/reportes/:id      (solo ADMINISTRADOR)');
+  console.log('   GET    /api/admin/auditoria         (solo ADMINISTRADOR)');
   console.log('   WS     /socket.io                   (mensajería y avisos con JWT)');
   console.log('   GET    /api/me                      (requiere JWT)');
   console.log('   GET    /health');

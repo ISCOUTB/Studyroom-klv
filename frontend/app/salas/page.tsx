@@ -5,27 +5,17 @@ import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { useAuth } from '@/lib/auth-context';
 import { apiRequest } from '@/lib/api';
+import { useCatalogo } from '@/lib/catalogo';
 import {
-  ASIGNATURAS,
-  type Asignatura,
   type Sala,
-  colorDeMateria,
   formatearFechaProgramada,
   inicialesDe,
 } from '@/lib/salas';
 
 type FiltroEstado = 'Todas' | 'En vivo' | 'Programadas';
-type FiltroMateria = 'Todas' | Asignatura;
+type FiltroMateria = string;
 type CuandoSala = 'ahora' | 'programar';
 type PrivacidadSala = 'publica' | 'privada';
-
-const MATERIAS_CHIPS: Asignatura[] = [
-  'Álgebra Lineal',
-  'Cálculo I',
-  'Cálculo Integral',
-  'Estadística',
-  'Física I',
-];
 
 const FILTROS_ESTADO: FiltroEstado[] = ['Todas', 'En vivo', 'Programadas'];
 
@@ -142,6 +132,7 @@ function IconoCopiar({ className = 'h-3.5 w-3.5' }: { className?: string }) {
 export default function SalasPage() {
   const { user, token, isLoading } = useAuth();
   const router = useRouter();
+  const { activas, colorDe } = useCatalogo();
 
   const [salas, setSalas] = useState<Sala[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -155,7 +146,7 @@ export default function SalasPage() {
 
   const [modalCrear, setModalCrear] = useState(false);
   const [titulo, setTitulo] = useState('');
-  const [asignatura, setAsignatura] = useState<Asignatura | ''>('');
+  const [asignatura, setAsignatura] = useState('');
   const [tema, setTema] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [cuando, setCuando] = useState<CuandoSala>('ahora');
@@ -622,14 +613,14 @@ export default function SalasPage() {
               />
               Todas las materias
             </button>
-            {MATERIAS_CHIPS.map((materia) => {
-              const color = colorDeMateria(materia);
-              const activo = filtroMateria === materia;
+            {activas.map((materia) => {
+              const color = colorDe(materia.nombre);
+              const activo = filtroMateria === materia.nombre;
               return (
                 <button
-                  key={materia}
+                  key={materia.id}
                   type="button"
-                  onClick={() => setFiltroMateria(materia)}
+                  onClick={() => setFiltroMateria(materia.nombre)}
                   aria-pressed={activo}
                   className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                     activo
@@ -642,7 +633,7 @@ export default function SalasPage() {
                       activo ? 'bg-white' : color.punto
                     }`}
                   />
-                  {materia}
+                  {materia.nombre}
                 </button>
               );
             })}
@@ -748,7 +739,7 @@ export default function SalasPage() {
               </p>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {filtradas.map((sala) => {
-                  const color = colorDeMateria(sala.asignatura);
+                  const color = colorDe(sala.asignatura);
                   const llena = sala.participantesActuales >= sala.cupoMaximo;
                   const uniendo = uniendoId === sala.id;
                   const progreso = Math.min(
@@ -1026,15 +1017,13 @@ export default function SalasPage() {
                           id="sala-asignatura"
                           required
                           value={asignatura}
-                          onChange={(evento) =>
-                            setAsignatura(evento.target.value as Asignatura | '')
-                          }
+                          onChange={(evento) => setAsignatura(evento.target.value)}
                           className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 focus:border-[#0B4FC4] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B4FC4]/20"
                         >
                           <option value="">Elige una asignatura…</option>
-                          {ASIGNATURAS.map((item) => (
-                            <option key={item} value={item}>
-                              {item}
+                          {activas.map((item) => (
+                            <option key={item.id} value={item.nombre}>
+                              {item.nombre}
                             </option>
                           ))}
                         </select>

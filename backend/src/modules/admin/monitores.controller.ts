@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../../config/prisma';
 import { AuthRequest } from '../../shared/middleware/auth.middleware';
 import { crearNotificacion } from '../notificaciones/notificaciones.service';
+import { registrarAuditoria } from './auditoria.service';
 
 const ETIQUETA_MODALIDAD: Record<string, string> = {
   VIRTUAL: 'Virtual',
@@ -79,7 +80,7 @@ export const responderSolicitudMonitor = async (req: AuthRequest, res: Response)
   try {
     const tutor = await prisma.tutor.findUnique({
       where: { id },
-      include: { usuario: { select: { rol: true, nombre: true } } },
+      include: { usuario: { select: { rol: true, nombre: true, correoUnico: true } } },
     });
 
     if (!tutor) {
@@ -104,6 +105,14 @@ export const responderSolicitudMonitor = async (req: AuthRequest, res: Response)
         enlace: '/perfil/monitor',
       });
 
+      if (req.user) {
+        await registrarAuditoria(
+          req.user.id,
+          'MONITOR_APROBADO',
+          `Aprobó la solicitud de monitor de ${tutor.usuario.nombre} (${tutor.usuario.correoUnico}).`
+        );
+      }
+
       return res.json({
         message: `${tutor.usuario.nombre} fue aprobado como monitor. Debe volver a iniciar sesión para ver su nuevo rol.`,
       });
@@ -125,6 +134,14 @@ export const responderSolicitudMonitor = async (req: AuthRequest, res: Response)
         'Tu solicitud para ser monitor no fue aprobada. Puedes actualizar tu perfil y volver a postularte.',
       enlace: '/perfil/monitor',
     });
+
+    if (req.user) {
+      await registrarAuditoria(
+        req.user.id,
+        'MONITOR_RECHAZADO',
+        `Rechazó la solicitud de monitor de ${tutor.usuario.nombre} (${tutor.usuario.correoUnico}).`
+      );
+    }
 
     return res.json({ message: 'Solicitud de monitor rechazada y eliminada.' });
   } catch (error) {

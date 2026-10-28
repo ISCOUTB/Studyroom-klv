@@ -6,7 +6,8 @@ import { useAuth } from '@/lib/auth-context';
 import { AppShell } from '@/components/layout/AppShell';
 import { apiRequest } from '@/lib/api';
 import { useNotificaciones } from '@/lib/notifications-context';
-import { ASIGNATURAS, inicialesDe } from '@/lib/salas';
+import { useCatalogo } from '@/lib/catalogo';
+import { inicialesDe } from '@/lib/salas';
 import {
   type ContextoTutorias,
   type DisponibilidadMonitor,
@@ -19,6 +20,7 @@ import {
 export default function PerfilMonitorPage() {
   const { user, token, isLoading } = useAuth();
   const { ultimaNotificacion } = useNotificaciones();
+  const { activas } = useCatalogo();
   const router = useRouter();
 
   const [contexto, setContexto] = useState<ContextoTutorias | null>(null);
@@ -412,18 +414,20 @@ export default function PerfilMonitorPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
-                    {ASIGNATURAS.filter((asignatura) => !asignaturas.includes(asignatura)).map(
-                      (asignatura) => (
+                    {activas
+                      .filter(
+                        (materia) => !asignaturas.includes(materia.nombre)
+                      )
+                      .map((materia) => (
                         <button
-                          key={asignatura}
+                          key={materia.id}
                           type="button"
-                          onClick={() => agregarAsignatura(asignatura)}
+                          onClick={() => agregarAsignatura(materia.nombre)}
                           className="text-[10px] font-semibold text-slate-500 hover:text-[#0B4FC4] bg-slate-100 hover:bg-blue-50 px-2 py-1 rounded-lg"
                         >
-                          + {asignatura}
+                          + {materia.nombre}
                         </button>
-                      )
-                    )}
+                      ))}
                   </div>
                 </div>
 
