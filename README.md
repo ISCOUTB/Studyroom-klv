@@ -65,6 +65,8 @@ Proyecto desarrollado para la asignatura de Ingeniería de Software (Grupo 1206)
    ```
    El seed crea (o actualiza) el usuario administrador con las credenciales definidas en `backend/.env`.
 
+   > Si modificas `prisma/schema.prisma`, detén el backend antes de ejecutar `npm run db:generate`. En Windows el proceso en ejecución bloquea el motor de Prisma y la generación falla con `EPERM`.
+
 ---
 
 ## Ejecución
