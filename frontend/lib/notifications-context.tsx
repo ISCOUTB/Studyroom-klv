@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
-import { API_URL, apiRequest } from './api';
+import { API_URL, getApiUrl, apiRequest } from './api';
 import { useAuth } from './auth-context';
 import {
   LIMITE_NOTIFICACIONES,
@@ -105,7 +105,7 @@ export const NotificationsProvider: React.FC<{ children: React.ReactNode }> = ({
       return;
     }
 
-    const socket = io(API_URL, {
+    const socket = io(getApiUrl(), {
       auth: { token },
       reconnection: true,
     });

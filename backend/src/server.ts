@@ -43,14 +43,14 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
 const httpServer = createServer(app);
 const io = new SocketServer(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: process.env.NODE_ENV !== 'production' ? true : allowedOrigins,
     credentials: true,
   },
 });
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: process.env.NODE_ENV !== 'production' ? true : allowedOrigins,
     credentials: true,
   })
 );
@@ -136,7 +136,7 @@ registrarChat(io);
 // ---------------------------------------------------------
 iniciarSchedulerTutorias();
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('============================================================');
   console.log('  StudyRoom - API');

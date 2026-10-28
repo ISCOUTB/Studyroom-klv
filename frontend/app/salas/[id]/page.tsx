@@ -18,7 +18,7 @@ import {
 } from '@/components/sala/iconos-sala';
 import { useParams, useRouter } from 'next/navigation';
 import { io, type Socket } from 'socket.io-client';
-import { apiRequest, API_URL } from '@/lib/api';
+import { apiRequest, API_URL, getApiUrl } from '@/lib/api';
 import { Toast, useToast } from '@/components/ui/Toast';
 import { ModalReporte } from '@/components/reportes/ModalReporte';
 import { useTheme } from '@/lib/theme-context';
@@ -600,7 +600,7 @@ export default function SalaEnVivoPage() {
       return;
     }
 
-    const socket = io(API_URL, {
+    const socket = io(getApiUrl(), {
       auth: { token },
       reconnection: true,
     });
