@@ -16,6 +16,8 @@ export interface ColorMateria {
   texto: string;
   suave: string;
   borde: string;
+  /** Chip de filtro activo: relleno con el color de la asignatura. */
+  relleno: string;
 }
 
 export const COLORES_MATERIA: Record<string, ColorMateria> = {
@@ -26,6 +28,7 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     texto: 'text-blue-700',
     suave: 'bg-blue-50',
     borde: 'border-blue-200',
+    relleno: 'border-blue-600 bg-blue-600 text-white shadow-sm',
   },
   'Física I': {
     punto: 'bg-emerald-500',
@@ -34,14 +37,16 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     texto: 'text-emerald-700',
     suave: 'bg-emerald-50',
     borde: 'border-emerald-200',
+    relleno: 'border-emerald-600 bg-emerald-600 text-white shadow-sm',
   },
   'Álgebra Lineal': {
     punto: 'bg-amber-500',
-    franja: 'bg-amber-400',
+    franja: 'bg-amber-500',
     chip: 'bg-amber-50 text-amber-700 border-amber-200',
     texto: 'text-amber-700',
     suave: 'bg-amber-50',
     borde: 'border-amber-200',
+    relleno: 'border-amber-500 bg-amber-500 text-amber-950 shadow-sm',
   },
   Estadística: {
     punto: 'bg-rose-500',
@@ -50,6 +55,7 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     texto: 'text-rose-700',
     suave: 'bg-rose-50',
     borde: 'border-rose-200',
+    relleno: 'border-rose-600 bg-rose-600 text-white shadow-sm',
   },
   'Cálculo Integral': {
     punto: 'bg-violet-500',
@@ -58,6 +64,7 @@ export const COLORES_MATERIA: Record<string, ColorMateria> = {
     texto: 'text-violet-700',
     suave: 'bg-violet-50',
     borde: 'border-violet-200',
+    relleno: 'border-violet-600 bg-violet-600 text-white shadow-sm',
   },
 };
 
@@ -68,6 +75,7 @@ const COLOR_POR_DEFECTO: ColorMateria = {
   texto: 'text-slate-600',
   suave: 'bg-slate-50',
   borde: 'border-slate-200',
+  relleno: 'border-slate-500 bg-slate-500 text-white shadow-sm',
 };
 
 export function colorDeMateria(asignatura: string): ColorMateria {

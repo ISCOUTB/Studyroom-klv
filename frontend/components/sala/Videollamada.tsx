@@ -58,22 +58,36 @@ function estadoDesdeStream(stream: MediaStream | null): EstadoMedia {
   };
 }
 
-/** Pide cámara y micrófono, degradando a solo audio o solo video. */
-async function pedirMedios(): Promise<MediaStream | null> {
+/** Pide cámara y micrófono según las preferencias, degradando si hace falta. */
+async function pedirMedios({
+  microfono,
+  camara,
+}: {
+  microfono: boolean;
+  camara: boolean;
+}): Promise<MediaStream | null> {
   if (!navigator.mediaDevices?.getUserMedia) return null;
+  if (!microfono && !camara) return null;
 
-  const intentos: MediaStreamConstraints[] = [
-    {
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: 'user',
-      },
-      audio: { echoCancellation: true, noiseSuppression: true },
-    },
-    { audio: { echoCancellation: true, noiseSuppression: true } },
-    { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
-  ];
+  const audio = { echoCancellation: true, noiseSuppression: true };
+  const video = {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    facingMode: 'user',
+  };
+
+  const intentos: MediaStreamConstraints[] = [];
+
+  if (microfono && camara) {
+    intentos.push({ video, audio });
+    intentos.push({ audio });
+    intentos.push({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+  } else if (microfono) {
+    intentos.push({ audio });
+  } else {
+    intentos.push({ video });
+    intentos.push({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+  }
 
   for (const restricciones of intentos) {
     try {
@@ -536,57 +550,65 @@ export function useVideollamada({
     []
   );
 
-  const unirse = useCallback(async () => {
-    if (!socket || !salaId || enLlamadaRef.current) return;
+  const unirse = useCallback(
+    async (opciones?: { microfono?: boolean; camara?: boolean }) => {
+      if (!socket || !salaId || enLlamadaRef.current) return;
 
-    setCargando(true);
-    setError('');
-    setAviso('');
+      const microfono = opciones?.microfono ?? true;
+      const camara = opciones?.camara ?? true;
 
-    const stream = await pedirMedios();
+      setCargando(true);
+      setError('');
+      setAviso('');
 
-    if (stream) {
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      estadoLocalRef.current = estadoDesdeStream(stream);
-      setEstadoLocal(estadoLocalRef.current);
-    } else {
-      estadoLocalRef.current = ESTADO_APAGADO;
-      setEstadoLocal(ESTADO_APAGADO);
-      setAviso(
-        'Entraste sin cámara ni micrófono. Puedes activarlos con los botones de la llamada.'
-      );
-    }
+      const stream = await pedirMedios({ microfono, camara });
 
-    enLlamadaRef.current = true;
-    setEnLlamada(true);
-
-    socket.emit(
-      'webrtc:entrar',
-      { salaId, estado: estadoLocalRef.current },
-      (respuesta: any) => {
-        setCargando(false);
-
-        if (!respuesta?.ok) {
-          enLlamadaRef.current = false;
-          setEnLlamada(false);
-          setError(respuesta?.error || 'No se pudo entrar a la videollamada.');
-          return;
-        }
-
-        const participantes = Array.isArray(respuesta.participantes)
-          ? (respuesta.participantes as ParticipanteLlamada[])
-          : [];
-
-        for (const participante of participantes) {
-          guardarRemoto(participante.usuarioId, {
-            nombre: participante.nombre,
-            estado: participante.estado ?? ESTADO_APAGADO,
-          });
-        }
+      if (stream) {
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        estadoLocalRef.current = estadoDesdeStream(stream);
+        setEstadoLocal(estadoLocalRef.current);
+      } else {
+        estadoLocalRef.current = ESTADO_APAGADO;
+        setEstadoLocal(ESTADO_APAGADO);
+        setAviso(
+          microfono || camara
+            ? 'Entraste sin cámara ni micrófono. Puedes activarlos con los botones de la llamada.'
+            : 'Entraste con el micrófono y la cámara apagados. Puedes activarlos cuando quieras.'
+        );
       }
-    );
-  }, [guardarRemoto, salaId, socket]);
+
+      enLlamadaRef.current = true;
+      setEnLlamada(true);
+
+      socket.emit(
+        'webrtc:entrar',
+        { salaId, estado: estadoLocalRef.current },
+        (respuesta: any) => {
+          setCargando(false);
+
+          if (!respuesta?.ok) {
+            enLlamadaRef.current = false;
+            setEnLlamada(false);
+            setError(respuesta?.error || 'No se pudo entrar a la videollamada.');
+            return;
+          }
+
+          const participantes = Array.isArray(respuesta.participantes)
+            ? (respuesta.participantes as ParticipanteLlamada[])
+            : [];
+
+          for (const participante of participantes) {
+            guardarRemoto(participante.usuarioId, {
+              nombre: participante.nombre,
+              estado: participante.estado ?? ESTADO_APAGADO,
+            });
+          }
+        }
+      );
+    },
+    [guardarRemoto, salaId, socket]
+  );
 
   const salir = useCallback(() => {
     limpiarTodo(true);

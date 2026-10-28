@@ -165,7 +165,6 @@ export default function SalasPage() {
   const [cupo, setCupo] = useState(10);
   const [creando, setCreando] = useState(false);
   const [modalError, setModalError] = useState('');
-  const [salaCreada, setSalaCreada] = useState<Sala | null>(null);
   const [codigoCopiado, setCodigoCopiado] = useState('');
 
   const [accesoAbierto, setAccesoAbierto] = useState(false);
@@ -219,7 +218,6 @@ export default function SalasPage() {
     setPrivacidad('publica');
     setCupo(10);
     setModalError('');
-    setSalaCreada(null);
     setCodigoCopiado('');
   };
 
@@ -326,7 +324,9 @@ export default function SalasPage() {
       });
 
       setSalas((prev) => [data.sala, ...prev]);
-      setSalaCreada(data.sala);
+      setModalCrear(false);
+      reiniciarFormulario();
+      router.push(`/salas/${data.sala.id}?creada=1`);
     } catch (err) {
       setModalError(
         err instanceof Error
@@ -608,13 +608,18 @@ export default function SalasPage() {
             <button
               type="button"
               onClick={() => setFiltroMateria('Todas')}
+              aria-pressed={filtroMateria === 'Todas'}
               className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                 filtroMateria === 'Todas'
-                  ? 'border-[#0B4FC4] bg-blue-50 text-[#0B4FC4]'
+                  ? 'border-[#0B4FC4] bg-[#0B4FC4] text-white shadow-sm'
                   : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800'
               }`}
             >
-              <span className="h-2 w-2 rounded-full bg-[#0B4FC4]" />
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  filtroMateria === 'Todas' ? 'bg-white' : 'bg-[#0B4FC4]'
+                }`}
+              />
               Todas las materias
             </button>
             {MATERIAS_CHIPS.map((materia) => {
@@ -625,13 +630,18 @@ export default function SalasPage() {
                   key={materia}
                   type="button"
                   onClick={() => setFiltroMateria(materia)}
+                  aria-pressed={activo}
                   className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                     activo
-                      ? 'border-[#0B4FC4] bg-blue-50 text-[#0B4FC4]'
+                      ? color.relleno
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800'
                   }`}
                 >
-                  <span className={`h-2 w-2 rounded-full ${color.punto}`} />
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      activo ? 'bg-white' : color.punto
+                    }`}
+                  />
                   {materia}
                 </button>
               );
@@ -681,7 +691,7 @@ export default function SalasPage() {
                   key={item}
                   className="h-72 animate-pulse overflow-hidden rounded-2xl border border-slate-200 bg-white"
                 >
-                  <div className="h-1.5 bg-slate-200" />
+                  <div className="h-1 bg-slate-200" />
                   <div className="space-y-3 p-5">
                     <div className="h-5 w-1/3 rounded bg-slate-100" />
                     <div className="h-5 w-4/5 rounded bg-slate-200" />
@@ -749,13 +759,46 @@ export default function SalasPage() {
                     )
                   );
                   const esPrivada = sala.privacidad === 'Privada';
+                  const sinAcceso = !sala.participando && !sala.esAnfitrion;
+                  const deshabilitada = llena && sinAcceso;
 
                   return (
                     <article
                       key={sala.id}
-                      className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                      role="link"
+                      tabIndex={deshabilitada ? -1 : 0}
+                      aria-disabled={deshabilitada || undefined}
+                      aria-label={
+                        deshabilitada
+                          ? `${sala.titulo}. Cupo lleno.`
+                          : `${sala.titulo}. ${
+                              sinAcceso
+                                ? esPrivada
+                                  ? 'Unirme con código'
+                                  : 'Unirme a la sala'
+                                : 'Entrar a la sala'
+                            }`
+                      }
+                      onClick={() => {
+                        if (deshabilitada || uniendo) return;
+                        handleEntrarSala(sala);
+                      }}
+                      onKeyDown={(evento) => {
+                        if (deshabilitada || uniendo) return;
+                        if (evento.key === 'Enter' || evento.key === ' ') {
+                          evento.preventDefault();
+                          handleEntrarSala(sala);
+                        }
+                      }}
+                      className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-white transition-all duration-200 ${
+                        deshabilitada
+                          ? 'cursor-not-allowed border-slate-200 opacity-60'
+                          : uniendo
+                            ? 'cursor-wait border-slate-200 opacity-70 shadow-sm'
+                            : 'cursor-pointer border-slate-200 shadow-sm hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B4FC4] focus-visible:ring-offset-2'
+                      }`}
                     >
-                      <div className={`h-1.5 w-full ${color.franja}`} />
+                      <div className={`h-1 w-full ${color.franja}`} />
 
                       <div className="flex flex-1 flex-col p-5">
                         <div className="flex items-start justify-between gap-2">
@@ -830,12 +873,14 @@ export default function SalasPage() {
                         {esPrivada && sala.codigoAcceso && (
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(evento) => {
+                              evento.stopPropagation();
                               copiarCodigo(
                                 sala.codigoAcceso ?? '',
                                 `sala-${sala.id}`
-                              )
-                            }
+                              );
+                            }}
+                            onKeyDown={(evento) => evento.stopPropagation()}
                             className="mt-3 inline-flex w-full items-center justify-between gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:border-[#0B4FC4]/40 hover:text-[#0B4FC4]"
                             title="Copiar código de acceso"
                           >
@@ -857,7 +902,11 @@ export default function SalasPage() {
                         <div className="mt-auto pt-4">
                           <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
                             <span>Cupo</span>
-                            <span>
+                            <span
+                              className={
+                                deshabilitada ? 'font-bold text-rose-600' : ''
+                              }
+                            >
                               {sala.participantesActuales}/{sala.cupoMaximo}
                             </span>
                           </div>
@@ -868,34 +917,36 @@ export default function SalasPage() {
                             />
                           </div>
 
-                          <div className="mt-4 border-t border-slate-100 pt-3">
-                            {sala.participando || sala.esAnfitrion ? (
-                              <button
-                                type="button"
-                                onClick={() => handleEntrarSala(sala)}
-                                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-[#0B4FC4] transition-colors hover:bg-blue-100"
-                              >
-                                Ya estás en esta sala
-                                <span aria-hidden="true">→</span>
-                              </button>
-                            ) : llena ? (
-                              <button
-                                type="button"
-                                disabled
-                                className="w-full cursor-not-allowed rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-400"
-                              >
+                          <div className="mt-3 flex min-h-[1.75rem] items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                            {deshabilitada ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-600 ring-1 ring-inset ring-rose-100">
                                 Cupo lleno
-                              </button>
+                              </span>
+                            ) : sinAcceso ? (
+                              esPrivada ? (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                                  <IconoCandado className="h-3 w-3" />
+                                  Requiere código
+                                </span>
+                              ) : (
+                                <span className="text-[11px] font-semibold text-slate-400">
+                                  {uniendo ? 'Entrando…' : 'Clic para entrar'}
+                                </span>
+                              )
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleEntrarSala(sala)}
-                                disabled={uniendo}
-                                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:border-[#0B4FC4]/40 hover:text-[#0B4FC4] disabled:cursor-not-allowed disabled:opacity-60"
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#0B4FC4]">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#0B4FC4]" />
+                                Ya estás dentro
+                              </span>
+                            )}
+
+                            {!deshabilitada && (
+                              <span
+                                aria-hidden="true"
+                                className="text-sm font-bold text-slate-300 transition-colors group-hover:text-[#0B4FC4]"
                               >
-                                {uniendo ? 'Entrando…' : esPrivada ? 'Unirme con código' : 'Unirme'}
-                                {!uniendo && <span aria-hidden="true">→</span>}
-                              </button>
+                                →
+                              </span>
                             )}
                           </div>
                         </div>
@@ -923,12 +974,10 @@ export default function SalasPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <h2 className="text-lg font-black tracking-tight text-slate-900">
-                    {salaCreada ? 'Tu sala está lista' : 'Crear una sala de estudio'}
+                    Crear una sala de estudio
                   </h2>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {salaCreada
-                      ? 'Comparte el acceso con tus compañeros y empiecen a estudiar.'
-                      : 'Reúnete con compañeros de tu materia y resuelvan dudas juntos.'}
+                    Reúnete con compañeros de tu materia y resuelvan dudas juntos.
                   </p>
                 </div>
                 <button
@@ -943,94 +992,6 @@ export default function SalasPage() {
               </div>
             </header>
 
-            {salaCreada ? (
-              <>
-                <div className="flex-1 overflow-y-auto px-5 py-8">
-                  <div className="mx-auto max-w-md text-center">
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-3xl ring-1 ring-inset ring-emerald-100">
-                      ✓
-                    </div>
-                    <h3 className="mt-4 text-xl font-black text-slate-900">
-                      {salaCreada.titulo}
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {salaCreada.asignatura} · {salaCreada.tema}
-                    </p>
-
-                    {salaCreada.estado === 'Programada' &&
-                      salaCreada.programadaEn && (
-                        <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-[#0B4FC4]">
-                          <IconoCalendario className="h-3.5 w-3.5" />
-                          {formatearFechaProgramada(salaCreada.programadaEn)}
-                        </p>
-                      )}
-
-                    {salaCreada.privacidad === 'Privada' &&
-                      salaCreada.codigoAcceso && (
-                        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                            Código de acceso
-                          </p>
-                          <div className="mt-2 flex items-center justify-center gap-3">
-                            <span className="font-mono text-2xl font-black tracking-[0.2em] text-[#0B4FC4]">
-                              {salaCreada.codigoAcceso}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                copiarCodigo(
-                                  salaCreada.codigoAcceso ?? '',
-                                  'creada'
-                                )
-                              }
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 transition-colors hover:border-[#0B4FC4]/40 hover:text-[#0B4FC4]"
-                            >
-                              <IconoCopiar />
-                              {codigoCopiado === 'creada' ? 'Copiado' : 'Copiar'}
-                            </button>
-                          </div>
-                          <p className="mt-2 text-[11px] text-slate-500">
-                            Solo entra quien tenga este código o el enlace de la
-                            sala.
-                          </p>
-                        </div>
-                      )}
-
-                    <p className="mt-5 text-xs leading-relaxed text-slate-500">
-                      {salaCreada.estado === 'Programada'
-                        ? 'La sala se activará automáticamente en la fecha y hora elegidas.'
-                        : 'La sala ya está activa. Puedes entrar ahora mismo.'}
-                    </p>
-                  </div>
-                </div>
-
-                <footer className="shrink-0 border-t border-slate-100 bg-slate-50 px-5 py-4">
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <button
-                      type="button"
-                      onClick={cerrarModalCrear}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100"
-                    >
-                      Cerrar
-                    </button>
-                    {salaCreada.estado === 'Activa' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const id = salaCreada.id;
-                          setModalCrear(false);
-                          reiniciarFormulario();
-                          router.push(`/salas/${id}`);
-                        }}
-                        className="rounded-xl bg-[#0B4FC4] px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-[#093fa3]"
-                      >
-                        Entrar a la sala
-                      </button>
-                    )}
-                  </div>
-                </footer>
-              </>
-            ) : (
               <form onSubmit={handleCrearSala} className="flex min-h-0 flex-1 flex-col">
                 <div className="flex-1 overflow-y-auto px-5 py-5">
                   <div className="space-y-5">
@@ -1351,7 +1312,6 @@ export default function SalasPage() {
                   </div>
                 </footer>
               </form>
-            )}
           </div>
         </div>
       )}

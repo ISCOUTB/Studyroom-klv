@@ -32,94 +32,262 @@ body {
 }
 
 /*
- * Modo oscuro del área autenticada.
- * Se limita a .app-shell para no alterar el login ni las pantallas públicas.
+ * Modo oscuro global.
+ * La clase .dark se aplica en <html> desde ThemeProvider, por lo que cubre
+ * la barra lateral, el encabezado global y las pantallas de sala.
  */
-.app-shell.dark {
+html.dark {
   color-scheme: dark;
   background-color: #0b1220;
   color: #e2e8f0;
 }
 
-.app-shell.dark .bg-slate-50 {
+html.dark body {
   background-color: #0b1220;
 }
 
-.app-shell.dark .bg-slate-100 {
+.dark .bg-slate-50 {
+  background-color: #0b1220;
+}
+
+.dark .bg-slate-100 {
   background-color: #172033;
 }
 
-.app-shell.dark .bg-white:not(.keep-white) {
+.dark .bg-white:not(.keep-white) {
   background-color: #111a2e;
 }
 
-.app-shell.dark .bg-white\/95 {
+.dark .bg-white\/95 {
   background-color: rgba(17, 26, 46, 0.95);
 }
 
-.app-shell.dark .bg-white\/85 {
+.dark .bg-white\/85 {
   background-color: rgba(17, 26, 46, 0.85);
 }
 
-.app-shell.dark .bg-blue-50 {
+.dark .bg-blue-50 {
   background-color: #12224a;
 }
 
-.app-shell.dark .text-slate-900,
-.app-shell.dark .text-slate-800 {
+.dark .text-slate-900,
+.dark .text-slate-800 {
   color: #e5edf9;
 }
 
-.app-shell.dark .text-slate-700 {
+.dark .text-slate-700 {
   color: #cbd5e1;
 }
 
-.app-shell.dark .text-slate-600,
-.app-shell.dark .text-slate-500 {
+.dark .text-slate-600,
+.dark .text-slate-500 {
   color: #94a3b8;
 }
 
-.app-shell.dark .text-slate-400 {
+.dark .text-slate-400 {
   color: #64748b;
 }
 
-.app-shell.dark .text-\[\#0B4FC4\] {
+.dark .text-\[\#0B4FC4\] {
   color: #7fb2ff;
 }
 
-.app-shell.dark .border-slate-200 {
+.dark .border-slate-200 {
   border-color: #263247;
 }
 
-.app-shell.dark .border-slate-100,
-.app-shell.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+.dark .border-slate-100,
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
   border-color: #1d2940;
 }
 
-.app-shell.dark .hover\:bg-slate-50:hover,
-.app-shell.dark .hover\:bg-slate-100:hover,
-.app-shell.dark .hover\:bg-slate-200:hover {
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-slate-200:hover {
   background-color: #172033;
 }
 
-.app-shell.dark .hover\:bg-white:hover {
+.dark .hover\:bg-white:hover {
   background-color: #162033;
 }
 
-.app-shell.dark input::placeholder,
-.app-shell.dark textarea::placeholder {
+.dark input::placeholder,
+.dark textarea::placeholder {
   color: #64748b;
 }
 
-.app-shell.dark .shadow-sm,
-.app-shell.dark .shadow-md {
+.dark .shadow-sm,
+.dark .shadow-md {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-.app-shell.dark ::-webkit-scrollbar-track {
+.dark ::-webkit-scrollbar-track {
   background: #111a2e;
 }
 
-.app-shell.dark ::-webkit-scrollbar-thumb {
+.dark ::-webkit-scrollbar-thumb {
   background: #334155;
+}
+
+/* Superficies y acentos complementarios del modo oscuro. */
+.dark .bg-slate-200 {
+  background-color: #1e293b;
+}
+
+.dark .border-slate-300 {
+  border-color: #334155;
+}
+
+.dark .bg-emerald-50 {
+  background-color: #0d2b22;
+}
+
+.dark .bg-amber-50 {
+  background-color: #2c2312;
+}
+
+.dark .bg-rose-50 {
+  background-color: #2d1620;
+}
+
+.dark .bg-violet-50 {
+  background-color: #241a3a;
+}
+
+.dark .bg-red-50 {
+  background-color: #2d1618;
+}
+
+.dark .bg-orange-50 {
+  background-color: #2c1d12;
+}
+
+.dark .bg-purple-50 {
+  background-color: #241a33;
+}
+
+.dark .bg-emerald-50\/60 {
+  background-color: rgba(13, 43, 34, 0.6);
+}
+
+.dark .bg-blue-50\/60 {
+  background-color: rgba(18, 34, 74, 0.6);
+}
+
+.dark .bg-blue-50\/70 {
+  background-color: rgba(18, 34, 74, 0.7);
+}
+
+.dark .bg-blue-50\/50 {
+  background-color: rgba(18, 34, 74, 0.5);
+}
+
+.dark .bg-blue-100 {
+  background-color: #16305f;
+}
+
+.dark .border-blue-100,
+.dark .border-blue-200 {
+  border-color: #1e3a5f;
+}
+
+.dark .border-emerald-200 {
+  border-color: #115e4a;
+}
+
+.dark .border-amber-200 {
+  border-color: #78350f;
+}
+
+.dark .border-rose-200 {
+  border-color: #881337;
+}
+
+.dark .border-violet-200 {
+  border-color: #4c1d95;
+}
+
+.dark .border-red-200 {
+  border-color: #7f1d1d;
+}
+
+.dark .hover\:bg-blue-50:hover,
+.dark .hover\:bg-blue-50\/40:hover {
+  background-color: #12224a;
+}
+
+.dark .hover\:bg-red-50:hover {
+  background-color: #2d1618;
+}
+
+.dark .hover\:bg-emerald-100:hover {
+  background-color: #123b2f;
+}
+
+.dark .text-emerald-700 {
+  color: #6ee7b7;
+}
+
+.dark .text-emerald-900 {
+  color: #a7f3d0;
+}
+
+.dark .text-red-900 {
+  color: #fecaca;
+}
+
+.dark .text-blue-900 {
+  color: #bfdbfe;
+}
+
+.dark .text-emerald-600 {
+  color: #34d399;
+}
+
+.dark .text-amber-700 {
+  color: #fcd34d;
+}
+
+.dark .text-amber-600 {
+  color: #fbbf24;
+}
+
+.dark .text-rose-700 {
+  color: #fda4af;
+}
+
+.dark .text-rose-600 {
+  color: #fb7185;
+}
+
+.dark .text-violet-700 {
+  color: #c4b5fd;
+}
+
+.dark .text-red-700 {
+  color: #fca5a5;
+}
+
+.dark .text-red-600 {
+  color: #f87171;
+}
+
+.dark .text-orange-600 {
+  color: #fdba74;
+}
+
+.dark .text-purple-600 {
+  color: #d8b4fe;
+}
+
+.dark .text-blue-700 {
+  color: #93c5fd;
+}
+
+.dark .text-blue-600 {
+  color: #60a5fa;
+}
+
+.dark .placeholder\:text-slate-400::placeholder {
+  color: #64748b;
 }

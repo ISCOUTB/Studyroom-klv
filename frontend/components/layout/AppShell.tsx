@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme } from '@/lib/theme-context';
 import { UTBLogo } from './UTBLogo';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { inicialesDe } from '@/lib/salas';
@@ -186,14 +187,13 @@ function normalizar(valor: string): string {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const { temaOscuro, alternarTema } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
 
   const [sidebarAbierta, setSidebarAbierta] = useState(false);
   const [buscadorAbierto, setBuscadorAbierto] = useState(false);
   const [consulta, setConsulta] = useState('');
-  const [temaOscuro, setTemaOscuro] = useState(false);
-  const [temaListo, setTemaListo] = useState(false);
   const buscadorRef = useRef<HTMLInputElement | null>(null);
 
   const itemsVisibles = useMemo(
@@ -225,29 +225,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setSidebarAbierta(false);
   }, [pathname]);
-
-  useEffect(() => {
-    try {
-      const guardado = window.localStorage.getItem('studyroom-theme');
-      const prefiereOscuro = window.matchMedia(
-        '(prefers-color-scheme: dark)'
-      ).matches;
-      setTemaOscuro(guardado ? guardado === 'dark' : prefiereOscuro);
-    } catch {
-      // Sin acceso a localStorage: se mantiene el tema claro.
-    } finally {
-      setTemaListo(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!temaListo) return;
-    try {
-      window.localStorage.setItem('studyroom-theme', temaOscuro ? 'dark' : 'light');
-    } catch {
-      // Ignorado: el tema solo no se conservará entre visitas.
-    }
-  }, [temaOscuro, temaListo]);
 
   useEffect(() => {
     const alPresionar = (evento: KeyboardEvent) => {
@@ -433,7 +410,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
               <button
                 type="button"
-                onClick={() => setTemaOscuro((valor) => !valor)}
+                onClick={alternarTema}
                 className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-[#0B4FC4]"
                 aria-label={temaOscuro ? 'Activar modo claro' : 'Activar modo oscuro'}
                 title={temaOscuro ? 'Modo claro' : 'Modo oscuro'}
