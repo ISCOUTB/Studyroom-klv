@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
@@ -25,6 +25,18 @@ const ESTADO_APAGADO: EstadoMedia = {
 const SERVIDORES_ICE: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  // TURN publico como fallback para redes con NAT simetrico
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
 ];
 
 type Conexion = {
@@ -375,8 +387,6 @@ export function useVideollamada({
       if (payload?.salaId !== salaId || payload?.usuarioId === usuarioId) {
         return;
       }
-      if (!enLlamadaRef.current) return;
-
       // Si la persona vuelve a anunciarse (reconexión), se rehace la conexión.
       if (conexionesRef.current.has(payload.usuarioId)) {
         cerrarConexion(payload.usuarioId);
@@ -387,7 +397,10 @@ export function useVideollamada({
         nombre: payload.nombre ?? 'Participante',
         estado: payload.estado ?? ESTADO_APAGADO,
       });
-      crearConexion(payload.usuarioId, payload.nombre ?? 'Participante');
+      // Solo establecemos conexion WebRTC si nosotros tambien estamos en llamada
+      if (enLlamadaRef.current) {
+        crearConexion(payload.usuarioId, payload.nombre ?? 'Participante');
+      }
     };
 
     const alSalirParticipante = (payload: any) => {
@@ -603,11 +616,13 @@ export function useVideollamada({
               nombre: participante.nombre,
               estado: participante.estado ?? ESTADO_APAGADO,
             });
+            // Crear conexion WebRTC con cada participante ya en la llamada
+            crearConexion(participante.usuarioId, participante.nombre);
           }
         }
       );
     },
-    [guardarRemoto, salaId, socket]
+    [crearConexion, guardarRemoto, salaId, socket]
   );
 
   const salir = useCallback(() => {
